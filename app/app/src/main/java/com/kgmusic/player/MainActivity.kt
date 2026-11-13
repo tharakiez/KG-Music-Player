@@ -36,14 +36,19 @@ data class Song(
 class MainActivity : ComponentActivity() {
 
     private var player: ExoPlayer? = null
+    private var audioEffects: AudioEffects? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         player = ExoPlayer.Builder(this).build()
 
+        audioEffects = AudioEffects(
+            player!!.audioSessionId
+        )
+
         setContent {
-            KGMusicScreen()
+            KGMusicApp()
         }
     }
 
@@ -67,20 +72,24 @@ class MainActivity : ComponentActivity() {
             "${MediaStore.Audio.Media.TITLE} ASC"
         )?.use { cursor ->
 
-            val idColumn = cursor.getColumnIndexOrThrow(
-                MediaStore.Audio.Media._ID
-            )
-            val titleColumn = cursor.getColumnIndexOrThrow(
-                MediaStore.Audio.Media.TITLE
-            )
-            val artistColumn = cursor.getColumnIndexOrThrow(
-                MediaStore.Audio.Media.ARTIST
-            )
-
             while (cursor.moveToNext()) {
-                val id = cursor.getLong(idColumn)
-                val title = cursor.getString(titleColumn) ?: "Unknown"
-                val artist = cursor.getString(artistColumn) ?: "Unknown Artist"
+                val id = cursor.getLong(
+                    cursor.getColumnIndexOrThrow(
+                        MediaStore.Audio.Media._ID
+                    )
+                )
+
+                val title = cursor.getString(
+                    cursor.getColumnIndexOrThrow(
+                        MediaStore.Audio.Media.TITLE
+                    )
+                ) ?: "Unknown"
+
+                val artist = cursor.getString(
+                    cursor.getColumnIndexOrThrow(
+                        MediaStore.Audio.Media.ARTIST
+                    )
+                ) ?: "Unknown Artist"
 
                 val uri = android.content.ContentUris.withAppendedId(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -95,11 +104,18 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun KGMusicScreen() {
+    private fun KGMusicApp() {
 
         var songs by remember { mutableStateOf(emptyList<Song>()) }
-        var currentSong by remember { mutableStateOf("Nothing playing") }
-        var hasPermission by remember { mutableStateOf(false) }
+        var currentSong by remember {
+            mutableStateOf("Nothing playing")
+        }
+        var hasPermission by remember {
+            mutableStateOf(false)
+        }
+        var showEqualizer by remember {
+            mutableStateOf(false)
+        }
 
         val permission = if (Build.VERSION.SDK_INT >= 33) {
             Manifest.permission.READ_MEDIA_AUDIO
@@ -121,9 +137,7 @@ class MainActivity : ComponentActivity() {
                 permission
             ) == PackageManager.PERMISSION_GRANTED
 
-            if (hasPermission) {
-                songs = loadSongs()
-            }
+            if (hasPermission) songs = loadSongs()
         }
 
         val black = Color(0xFF080808)
@@ -136,136 +150,165 @@ class MainActivity : ComponentActivity() {
                 primary = gold
             )
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(black)
-                    .padding(18.dp)
-            ) {
-
-                Text(
-                    "KG",
-                    color = gold,
-                    fontSize = 42.sp
+            if (showEqualizer) {
+                EqualizerScreen(
+                    onBack = { showEqualizer = false },
+                    audioEffects = audioEffects
                 )
-
-                Text(
-                    "MUSIC PLAYER",
-                    color = Color.White,
-                    fontSize = 20.sp
-                )
-
-                Spacer(Modifier.height(25.dp))
-
-                Text(
-                    "YOUR MUSIC. YOUR SOUND.",
-                    color = gold,
-                    fontSize = 13.sp
-                )
-
-                Spacer(Modifier.height(20.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(black)
+                        .padding(18.dp)
                 ) {
-                    Text("MY MUSIC", color = Color.White)
-                    Text("${songs.size} Songs", color = gold)
-                }
 
-                Spacer(Modifier.height(12.dp))
-
-                if (!hasPermission) {
-                    Button(
-                        onClick = {
-                            permissionLauncher.launch(permission)
-                        }
-                    ) {
-                        Text("Allow access to phone music")
-                    }
-                } else if (songs.isEmpty()) {
                     Text(
-                        "No music found on your phone.",
-                        color = Color.LightGray
+                        "🎧 KG",
+                        color = gold,
+                        fontSize = 38.sp
                     )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f)
+
+                    Text(
+                        "MUSIC PLAYER",
+                        color = Color.White,
+                        fontSize = 20.sp
+                    )
+
+                    Spacer(Modifier.height(20.dp))
+
+                    Button(
+                        onClick = { showEqualizer = true },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(songs) { song ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        player?.apply {
-                                            setMediaItem(
-                                                MediaItem.fromUri(song.uri)
-                                            )
-                                            prepare()
-                                            play()
+                        Text("OPEN SOUND ENGINE  •  EQ")
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween
+                    ) {
+                        Text("MY MUSIC", color = Color.White)
+                        Text(
+                            "${songs.size} Songs",
+                            color = gold
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    if (!hasPermission) {
+                        Button(
+                            onClick = {
+                                permissionLauncher.launch(permission)
+                            }
+                        ) {
+                            Text("ALLOW MUSIC ACCESS")
+                        }
+                    } else if (songs.isEmpty()) {
+                        Text(
+                            "No music found on your phone.",
+                            color = Color.LightGray
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            items(songs) { song ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            player?.apply {
+                                                setMediaItem(
+                                                    MediaItem.fromUri(
+                                                        song.uri
+                                                    )
+                                                )
+                                                prepare()
+                                                play()
+                                            }
+                                            currentSong = song.title
                                         }
-                                        currentSong = song.title
-                                    }
-                                    .padding(vertical = 13.dp)
-                            ) {
-                                Text(
-                                    song.title,
-                                    color = Color.White
-                                )
-                                Text(
-                                    song.artist,
-                                    color = Color.Gray,
-                                    fontSize = 12.sp
+                                        .padding(vertical = 13.dp)
+                                ) {
+                                    Text(
+                                        song.title,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        song.artist,
+                                        color = Color.Gray,
+                                        fontSize = 12.sp
+                                    )
+                                }
+
+                                HorizontalDivider(
+                                    color = Color.DarkGray
                                 )
                             }
-                            HorizontalDivider(
-                                color = Color.DarkGray
-                            )
                         }
                     }
-                }
 
-                Spacer(Modifier.height(15.dp))
+                    Spacer(Modifier.height(12.dp))
 
-                Surface(
-                    color = Color(0xFF202020),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("NOW PLAYING", color = gold)
-                        Spacer(Modifier.height(5.dp))
-                        Text(
-                            currentSong,
-                            color = Color.White
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        color = Color(0xFF202020),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
                         ) {
-                            TextButton(
-                                onClick = { player?.seekToPrevious() }
-                            ) {
-                                Text("PREV", color = gold)
-                            }
+                            Text(
+                                "NOW PLAYING",
+                                color = gold
+                            )
 
-                            Button(
-                                onClick = {
-                                    player?.let {
-                                        if (it.isPlaying) it.pause()
-                                        else it.play()
+                            Text(
+                                currentSong,
+                                color = Color.White
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement =
+                                    Arrangement.SpaceEvenly,
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        player?.seekToPrevious()
                                     }
+                                ) {
+                                    Text("PREV", color = gold)
                                 }
-                            ) {
-                                Text("PLAY / PAUSE")
-                            }
 
-                            TextButton(
-                                onClick = { player?.seekToNext() }
-                            ) {
-                                Text("NEXT", color = gold)
+                                Button(
+                                    onClick = {
+                                        player?.let {
+                                            if (it.isPlaying) {
+                                                it.pause()
+                                            } else {
+                                                it.play()
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Text("PLAY / PAUSE")
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        player?.seekToNext()
+                                    }
+                                ) {
+                                    Text("NEXT", color = gold)
+                                }
                             }
                         }
                     }
@@ -275,6 +318,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        audioEffects?.release()
+        audioEffects = null
         player?.release()
         player = null
         super.onDestroy()
