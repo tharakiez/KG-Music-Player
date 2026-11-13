@@ -1,7 +1,9 @@
-     
+
 package com.kgmusic.player
 
 import android.Manifest
+import android.content.ComponentName
+import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -25,8 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 
 data class Song(
     val title: String,
@@ -36,21 +40,80 @@ data class Song(
 
 class MainActivity : ComponentActivity() {
 
-    private var player: ExoPlayer? = null
+    private var mediaController: MediaController? = null
     private var audioEffects: AudioEffects? = null
+
+    private val controllerReady = mutableStateOf(false)
+    private val currentSongState =
+        mutableStateOf("Nothing playing")
+    private val playingState = mutableStateOf(false)
+
+    private var controllerListener: Player.Listener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        player = ExoPlayer.Builder(this).build()
-
-        audioEffects = AudioEffects(
-            player!!.audioSessionId
-        )
+        connectPlaybackService()
 
         setContent {
             KGMusicApp()
         }
+    }
+
+    private fun connectPlaybackService() {
+        val token = SessionToken(
+            this,
+            ComponentName(this, PlaybackService::class.java)
+        )
+
+        val future = MediaController.Builder(this, token)
+            .buildAsync()
+
+        future.addListener({
+            try {
+                val controller = future.get()
+
+                mediaController = controller
+                controllerReady.value = true
+
+                audioEffects = AudioEffects(
+                    controller.audioSessionId
+                )
+
+                val listener = object : Player.Listener {
+
+                    override fun onMediaItemTransition(
+                        mediaItem: MediaItem?,
+                        reason: Int
+                    ) {
+                        currentSongState.value =
+                            mediaItem?.mediaMetadata?.title
+                                ?.toString() ?: "Nothing playing"
+                    }
+
+                    override fun onIsPlayingChanged(
+                        isPlaying: Boolean
+                    ) {
+                        playingState.value = isPlaying
+                    }
+                }
+
+                controllerListener = listener
+                controller.addListener(listener)
+
+                currentSongState.value =
+                    controller.currentMediaItem
+                        ?.mediaMetadata?.title
+                        ?.toString() ?: "Nothing playing"
+
+                playingState.value = controller.isPlaying
+
+            } catch (e: Exception) {
+                controllerReady.value = false
+                currentSongState.value =
+                    "Playback connection failed"
+            }
+        }, ContextCompat.getMainExecutor(this))
     }
 
     private fun loadSongs(): List<Song> {
@@ -74,6 +137,7 @@ class MainActivity : ComponentActivity() {
         )?.use { cursor ->
 
             while (cursor.moveToNext()) {
+
                 val id = cursor.getLong(
                     cursor.getColumnIndexOrThrow(
                         MediaStore.Audio.Media._ID
@@ -92,16 +156,55 @@ class MainActivity : ComponentActivity() {
                     )
                 ) ?: "Unknown Artist"
 
-                val uri = android.content.ContentUris.withAppendedId(
+                val uri = ContentUris.withAppendedId(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                     id
                 )
 
-                songs.add(Song(title, artist, uri))
+                songs.add(
+                    Song(title, artist, uri)
+                )
             }
         }
 
         return songs
+    }
+
+    private fun playSongs(
+        songs: List<Song>,
+        startIndex: Int,
+        shuffle: Boolean,
+        repeatAll: Boolean
+    ) {
+        val controller = mediaController ?: return
+        if (songs.isEmpty()) return
+
+        val items = songs.map { song ->
+
+            val metadata = MediaMetadata.Builder()
+                .setTitle(song.title)
+                .setArtist(song.artist)
+                .build()
+
+            MediaItem.Builder()
+                .setUri(song.uri)
+                .setMediaMetadata(metadata)
+                .build()
+        }
+
+        controller.apply {
+            setMediaItems(items, startIndex, 0L)
+            shuffleModeEnabled = shuffle
+
+            repeatMode = if (repeatAll) {
+                Player.REPEAT_MODE_ALL
+            } else {
+                Player.REPEAT_MODE_OFF
+            }
+
+            prepare()
+            play()
+        }
     }
 
     @Composable
@@ -109,10 +212,6 @@ class MainActivity : ComponentActivity() {
 
         var songs by remember {
             mutableStateOf(emptyList<Song>())
-        }
-
-        var currentSong by remember {
-            mutableStateOf("Nothing playing")
         }
 
         var hasPermission by remember {
@@ -131,6 +230,10 @@ class MainActivity : ComponentActivity() {
             mutableStateOf(false)
         }
 
+        val connected by controllerReady
+        val currentSong by currentSongState
+        val isPlaying by playingState
+
         val permission = if (Build.VERSION.SDK_INT >= 33) {
             Manifest.permission.READ_MEDIA_AUDIO
         } else {
@@ -142,14 +245,18 @@ class MainActivity : ComponentActivity() {
                 ActivityResultContracts.RequestPermission()
             ) { granted ->
                 hasPermission = granted
-                if (granted) songs = loadSongs()
+
+                if (granted) {
+                    songs = loadSongs()
+                }
             }
 
         LaunchedEffect(Unit) {
-            hasPermission = ContextCompat.checkSelfPermission(
-                this@MainActivity,
-                permission
-            ) == PackageManager.PERMISSION_GRANTED
+            hasPermission =
+                ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    permission
+                ) == PackageManager.PERMISSION_GRANTED
 
             if (hasPermission) {
                 songs = loadSongs()
@@ -197,7 +304,20 @@ class MainActivity : ComponentActivity() {
                         fontSize = 20.sp
                     )
 
-                    Spacer(Modifier.height(15.dp))
+                    Spacer(Modifier.height(10.dp))
+
+                    Text(
+                        if (connected) {
+                            "PLAYBACK SERVICE CONNECTED"
+                        } else {
+                            "CONNECTING TO PLAYBACK SERVICE..."
+                        },
+                        color = if (connected) gold
+                        else Color.LightGray,
+                        fontSize = 11.sp
+                    )
+
+                    Spacer(Modifier.height(14.dp))
 
                     Button(
                         onClick = {
@@ -208,31 +328,18 @@ class MainActivity : ComponentActivity() {
                         Text("OPEN SOUND ENGINE • EQ")
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(10.dp))
 
                     Button(
                         onClick = {
-                            if (songs.isNotEmpty()) {
-                                player?.apply {
-                                    setMediaItems(
-                                        songs.map {
-                                            MediaItem.fromUri(it.uri)
-                                        }
-                                    )
-                                    shuffleModeEnabled = shuffle
-                                    repeatMode =
-                                        if (repeatAll) {
-                                            Player.REPEAT_MODE_ALL
-                                        } else {
-                                            Player.REPEAT_MODE_OFF
-                                        }
-                                    prepare()
-                                    play()
-                                }
-
-                                currentSong = songs.first().title
-                            }
+                            playSongs(
+                                songs,
+                                0,
+                                shuffle,
+                                repeatAll
+                            )
                         },
+                        enabled = connected && songs.isNotEmpty(),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("▶ PLAY ALL SONGS")
@@ -245,10 +352,7 @@ class MainActivity : ComponentActivity() {
                         horizontalArrangement =
                             Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            "MY MUSIC",
-                            color = Color.White
-                        )
+                        Text("MY MUSIC", color = Color.White)
 
                         Text(
                             "${songs.size} Songs",
@@ -280,32 +384,21 @@ class MainActivity : ComponentActivity() {
                         LazyColumn(
                             modifier = Modifier.weight(1f)
                         ) {
-
                             items(songs) { song ->
 
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
-
                                             val index =
                                                 songs.indexOf(song)
 
-                                            player?.apply {
-                                                setMediaItems(
-                                                    songs.map {
-                                                        MediaItem.fromUri(
-                                                            it.uri
-                                                        )
-                                                    },
-                                                    index,
-                                                    0L
-                                                )
-                                                prepare()
-                                                play()
-                                            }
-
-                                            currentSong = song.title
+                                            playSongs(
+                                                songs,
+                                                index,
+                                                shuffle,
+                                                repeatAll
+                                            )
                                         }
                                         .padding(vertical = 12.dp)
                                 ) {
@@ -360,16 +453,19 @@ class MainActivity : ComponentActivity() {
                             ) {
 
                                 TextButton(
+                                    enabled = connected,
                                     onClick = {
-                                        player?.seekToPrevious()
+                                        mediaController
+                                            ?.seekToPrevious()
                                     }
                                 ) {
                                     Text("PREV", color = gold)
                                 }
 
                                 Button(
+                                    enabled = connected,
                                     onClick = {
-                                        player?.let {
+                                        mediaController?.let {
                                             if (it.isPlaying) {
                                                 it.pause()
                                             } else {
@@ -378,12 +474,17 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 ) {
-                                    Text("PLAY / PAUSE")
+                                    Text(
+                                        if (isPlaying) "PAUSE"
+                                        else "PLAY"
+                                    )
                                 }
 
                                 TextButton(
+                                    enabled = connected,
                                     onClick = {
-                                        player?.seekToNext()
+                                        mediaController
+                                            ?.seekToNext()
                                     }
                                 ) {
                                     Text("NEXT", color = gold)
@@ -397,10 +498,11 @@ class MainActivity : ComponentActivity() {
                             ) {
 
                                 TextButton(
+                                    enabled = connected,
                                     onClick = {
                                         shuffle = !shuffle
-                                        player?.shuffleModeEnabled =
-                                            shuffle
+                                        mediaController
+                                            ?.shuffleModeEnabled = shuffle
                                     }
                                 ) {
                                     Text(
@@ -412,9 +514,11 @@ class MainActivity : ComponentActivity() {
                                 }
 
                                 TextButton(
+                                    enabled = connected,
                                     onClick = {
                                         repeatAll = !repeatAll
-                                        player?.repeatMode =
+
+                                        mediaController?.repeatMode =
                                             if (repeatAll) {
                                                 Player.REPEAT_MODE_ALL
                                             } else {
@@ -423,8 +527,8 @@ class MainActivity : ComponentActivity() {
                                     }
                                 ) {
                                     Text(
-                                        if (repeatAll) "REPEAT ALL ON"
-                                        else "REPEAT ALL OFF",
+                                        if (repeatAll) "REPEAT ON"
+                                        else "REPEAT OFF",
                                         color = if (repeatAll) gold
                                         else Color.Gray
                                     )
@@ -438,11 +542,15 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        controllerListener?.let {
+            mediaController?.removeListener(it)
+        }
+
         audioEffects?.release()
         audioEffects = null
 
-        player?.release()
-        player = null
+        mediaController?.release()
+        mediaController = null
 
         super.onDestroy()
     }
