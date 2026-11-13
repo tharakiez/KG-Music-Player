@@ -1,4 +1,4 @@
-
+     
 package com.kgmusic.player
 
 import android.Manifest
@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 
 data class Song(
@@ -106,14 +107,27 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun KGMusicApp() {
 
-        var songs by remember { mutableStateOf(emptyList<Song>()) }
+        var songs by remember {
+            mutableStateOf(emptyList<Song>())
+        }
+
         var currentSong by remember {
             mutableStateOf("Nothing playing")
         }
+
         var hasPermission by remember {
             mutableStateOf(false)
         }
+
         var showEqualizer by remember {
+            mutableStateOf(false)
+        }
+
+        var shuffle by remember {
+            mutableStateOf(false)
+        }
+
+        var repeatAll by remember {
             mutableStateOf(false)
         }
 
@@ -137,7 +151,9 @@ class MainActivity : ComponentActivity() {
                 permission
             ) == PackageManager.PERMISSION_GRANTED
 
-            if (hasPermission) songs = loadSongs()
+            if (hasPermission) {
+                songs = loadSongs()
+            }
         }
 
         val black = Color(0xFF080808)
@@ -150,12 +166,18 @@ class MainActivity : ComponentActivity() {
                 primary = gold
             )
         ) {
+
             if (showEqualizer) {
+
                 EqualizerScreen(
-                    onBack = { showEqualizer = false },
+                    onBack = {
+                        showEqualizer = false
+                    },
                     audioEffects = audioEffects
                 )
+
             } else {
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -175,32 +197,69 @@ class MainActivity : ComponentActivity() {
                         fontSize = 20.sp
                     )
 
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(15.dp))
 
                     Button(
-                        onClick = { showEqualizer = true },
+                        onClick = {
+                            showEqualizer = true
+                        },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("OPEN SOUND ENGINE  •  EQ")
+                        Text("OPEN SOUND ENGINE • EQ")
                     }
 
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            if (songs.isNotEmpty()) {
+                                player?.apply {
+                                    setMediaItems(
+                                        songs.map {
+                                            MediaItem.fromUri(it.uri)
+                                        }
+                                    )
+                                    shuffleModeEnabled = shuffle
+                                    repeatMode =
+                                        if (repeatAll) {
+                                            Player.REPEAT_MODE_ALL
+                                        } else {
+                                            Player.REPEAT_MODE_OFF
+                                        }
+                                    prepare()
+                                    play()
+                                }
+
+                                currentSong = songs.first().title
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("▶ PLAY ALL SONGS")
+                    }
+
+                    Spacer(Modifier.height(12.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement =
                             Arrangement.SpaceBetween
                     ) {
-                        Text("MY MUSIC", color = Color.White)
+                        Text(
+                            "MY MUSIC",
+                            color = Color.White
+                        )
+
                         Text(
                             "${songs.size} Songs",
                             color = gold
                         )
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     if (!hasPermission) {
+
                         Button(
                             onClick = {
                                 permissionLauncher.launch(permission)
@@ -208,37 +267,54 @@ class MainActivity : ComponentActivity() {
                         ) {
                             Text("ALLOW MUSIC ACCESS")
                         }
+
                     } else if (songs.isEmpty()) {
+
                         Text(
                             "No music found on your phone.",
                             color = Color.LightGray
                         )
+
                     } else {
+
                         LazyColumn(
                             modifier = Modifier.weight(1f)
                         ) {
+
                             items(songs) { song ->
+
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
+
+                                            val index =
+                                                songs.indexOf(song)
+
                                             player?.apply {
-                                                setMediaItem(
-                                                    MediaItem.fromUri(
-                                                        song.uri
-                                                    )
+                                                setMediaItems(
+                                                    songs.map {
+                                                        MediaItem.fromUri(
+                                                            it.uri
+                                                        )
+                                                    },
+                                                    index,
+                                                    0L
                                                 )
                                                 prepare()
                                                 play()
                                             }
+
                                             currentSong = song.title
                                         }
-                                        .padding(vertical = 13.dp)
+                                        .padding(vertical = 12.dp)
                                 ) {
+
                                     Text(
                                         song.title,
                                         color = Color.White
                                     )
+
                                     Text(
                                         song.artist,
                                         color = Color.Gray,
@@ -253,16 +329,18 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(10.dp))
 
                     Surface(
                         color = Color(0xFF202020),
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
+
                         Column(
-                            modifier = Modifier.padding(16.dp)
+                            modifier = Modifier.padding(14.dp)
                         ) {
+
                             Text(
                                 "NOW PLAYING",
                                 color = gold
@@ -280,6 +358,7 @@ class MainActivity : ComponentActivity() {
                                 verticalAlignment =
                                     Alignment.CenterVertically
                             ) {
+
                                 TextButton(
                                     onClick = {
                                         player?.seekToPrevious()
@@ -310,6 +389,47 @@ class MainActivity : ComponentActivity() {
                                     Text("NEXT", color = gold)
                                 }
                             }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement =
+                                    Arrangement.SpaceEvenly
+                            ) {
+
+                                TextButton(
+                                    onClick = {
+                                        shuffle = !shuffle
+                                        player?.shuffleModeEnabled =
+                                            shuffle
+                                    }
+                                ) {
+                                    Text(
+                                        if (shuffle) "SHUFFLE ON"
+                                        else "SHUFFLE OFF",
+                                        color = if (shuffle) gold
+                                        else Color.Gray
+                                    )
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        repeatAll = !repeatAll
+                                        player?.repeatMode =
+                                            if (repeatAll) {
+                                                Player.REPEAT_MODE_ALL
+                                            } else {
+                                                Player.REPEAT_MODE_OFF
+                                            }
+                                    }
+                                ) {
+                                    Text(
+                                        if (repeatAll) "REPEAT ALL ON"
+                                        else "REPEAT ALL OFF",
+                                        color = if (repeatAll) gold
+                                        else Color.Gray
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -320,8 +440,10 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         audioEffects?.release()
         audioEffects = null
+
         player?.release()
         player = null
+
         super.onDestroy()
     }
 }
