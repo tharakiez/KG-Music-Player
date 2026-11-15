@@ -29,7 +29,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -318,8 +322,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        val black = Color(0xFF080808)
-        val gold = Color(0xFFFFC400)
+        val black = Color(0xFF090706)
+        val copper = Color(0xFFB87333)
+        val lightCopper = Color(0xFFE0A06A)
+        val panel = Color(0xFF1C1511)
 
         val folderNames = remember(songs, currentFolder) {
             val prefix = currentFolder?.let { "$it/" } ?: ""
@@ -348,8 +354,9 @@ class MainActivity : ComponentActivity() {
         MaterialTheme(
             colorScheme = darkColorScheme(
                 background = black,
-                surface = Color(0xFF171717),
-                primary = gold
+                surface = panel,
+                primary = copper,
+                secondary = lightCopper
             )
         ) {
 
@@ -366,18 +373,64 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier
                         .fillMaxSize()
                         .background(black)
-                        .padding(18.dp)
+                        .padding(16.dp)
                 ) {
 
-                    Text(
-                        "🎧 KG",
-                        color = gold,
-                        fontSize = 38.sp
-                    )
+                    // PERSONALIZED AFRICAN COPPER HEADER
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(190.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                    ) {
+
+                        Image(
+                            painter = painterResource(
+                                id = R.drawable.kg_portrait
+                            ),
+                            contentDescription = "KG portrait",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            Color(0xDD090706)
+                                        )
+                                    )
+                                )
+                        )
+
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(18.dp)
+                        ) {
+
+                            Text(
+                                "KG",
+                                color = lightCopper,
+                                fontSize = 34.sp
+                            )
+
+                            Text(
+                                "AFRICAN SOUL • MUSIC PLAYER",
+                                color = Color.White,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
 
                     Text(
-                        "MUSIC PLAYER",
-                        color = Color.White,
+                        "KG MUSIC PLAYER",
+                        color = copper,
                         fontSize = 20.sp
                     )
 
@@ -386,7 +439,7 @@ class MainActivity : ComponentActivity() {
                     Text(
                         if (connected) "PLAYBACK SERVICE CONNECTED"
                         else "CONNECTING TO PLAYBACK SERVICE...",
-                        color = if (connected) gold else Color.LightGray,
+                        color = if (connected) lightCopper else Color.LightGray,
                         fontSize = 11.sp
                     )
 
@@ -394,7 +447,10 @@ class MainActivity : ComponentActivity() {
 
                     Button(
                         onClick = { showEqualizer = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = copper
+                        )
                     ) {
                         Text("OPEN SOUND ENGINE • EQ")
                     }
@@ -406,7 +462,10 @@ class MainActivity : ComponentActivity() {
                             playSongs(songs, 0, shuffle, repeatAll)
                         },
                         enabled = connected && songs.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF75421F)
+                        )
                     ) {
                         Text("▶ PLAY ALL SONGS")
                     }
@@ -426,7 +485,7 @@ class MainActivity : ComponentActivity() {
 
                         Text(
                             "${songs.size} Songs",
-                            color = gold
+                            color = lightCopper
                         )
                     }
 
@@ -444,7 +503,7 @@ class MainActivity : ComponentActivity() {
                         ) {
                             Text(
                                 "← Back • ${currentFolder?.substringAfterLast("/")}",
-                                color = gold
+                                color = lightCopper
                             )
                         }
 
@@ -503,7 +562,7 @@ class MainActivity : ComponentActivity() {
                                     Icon(
                                         Icons.Default.Folder,
                                         contentDescription = "Folder",
-                                        tint = gold
+                                        tint = copper
                                     )
 
                                     Spacer(Modifier.width(12.dp))
@@ -516,13 +575,13 @@ class MainActivity : ComponentActivity() {
 
                                     Text(
                                         "OPEN  ›",
-                                        color = gold,
+                                        color = lightCopper,
                                         fontSize = 11.sp
                                     )
                                 }
 
                                 HorizontalDivider(
-                                    color = Color.DarkGray
+                                    color = Color(0xFF493326)
                                 )
                             }
 
@@ -561,7 +620,7 @@ class MainActivity : ComponentActivity() {
                                         Icon(
                                             Icons.Default.MusicNote,
                                             contentDescription = "Song",
-                                            tint = gold
+                                            tint = copper
                                         )
 
                                         Spacer(Modifier.width(12.dp))
@@ -577,7 +636,7 @@ class MainActivity : ComponentActivity() {
 
                                             Text(
                                                 song.artist,
-                                                color = Color.Gray,
+                                                color = Color.LightGray,
                                                 fontSize = 12.sp
                                             )
                                         }
@@ -585,7 +644,7 @@ class MainActivity : ComponentActivity() {
                                 }
 
                                 HorizontalDivider(
-                                    color = Color.DarkGray
+                                    color = Color(0xFF493326)
                                 )
                             }
                         }
@@ -597,7 +656,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF171717)
+                            containerColor = panel
                         )
                     ) {
 
@@ -607,7 +666,7 @@ class MainActivity : ComponentActivity() {
 
                             Text(
                                 "NOW PLAYING",
-                                color = gold,
+                                color = lightCopper,
                                 fontSize = 11.sp
                             )
 
@@ -636,7 +695,7 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     Text(
                                         if (shuffle) "SHUFFLE ON" else "SHUFFLE",
-                                        color = if (shuffle) gold else Color.Gray
+                                        color = if (shuffle) lightCopper else Color.Gray
                                     )
                                 }
 
@@ -648,7 +707,7 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     Text(
                                         "⏮",
-                                        color = gold,
+                                        color = lightCopper,
                                         fontSize = 24.sp
                                     )
                                 }
@@ -663,7 +722,10 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     },
-                                    enabled = connected
+                                    enabled = connected,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = copper
+                                    )
                                 ) {
                                     Text(
                                         if (isPlaying) "Ⅱ" else "▶",
@@ -679,7 +741,7 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     Text(
                                         "⏭",
-                                        color = gold,
+                                        color = lightCopper,
                                         fontSize = 24.sp
                                     )
                                 }
@@ -697,7 +759,7 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     Text(
                                         if (repeatAll) "REPEAT ON" else "REPEAT",
-                                        color = if (repeatAll) gold else Color.Gray
+                                        color = if (repeatAll) lightCopper else Color.Gray
                                     )
                                 }
                             }
