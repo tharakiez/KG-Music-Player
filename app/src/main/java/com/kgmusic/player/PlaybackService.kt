@@ -11,23 +11,27 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
 
+    companion object {
+        var audioSessionId: Int = 0
+            private set
+    }
+
     override fun onCreate() {
         super.onCreate()
 
         val player = ExoPlayer.Builder(this).build()
 
-        val activityIntent = packageManager
-            .getLaunchIntentForPackage(packageName)
+        audioSessionId = player.audioSessionId
 
-        val pendingIntent = activityIntent?.let {
-            PendingIntent.getActivity(
-                this,
-                0,
-                it,
-                PendingIntent.FLAG_UPDATE_CURRENT or
-                    PendingIntent.FLAG_IMMUTABLE
-            )
-        }
+        val activityIntent = Intent(this, MainActivity::class.java)
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            activityIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or
+                PendingIntent.FLAG_IMMUTABLE
+        )
 
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(pendingIntent)
@@ -47,6 +51,7 @@ class PlaybackService : MediaSessionService() {
         }
 
         mediaSession = null
+        audioSessionId = 0
 
         super.onDestroy()
     }
