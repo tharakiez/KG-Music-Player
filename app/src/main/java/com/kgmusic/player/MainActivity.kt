@@ -3,21 +3,27 @@ package com.kgmusic.player
 
 import android.Manifest
 import android.content.ComponentName
+import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
-import android.content.ContentUris
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,11 +37,13 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import java.io.File
 
 data class Song(
     val title: String,
     val artist: String,
-    val uri: android.net.Uri
+    val uri: android.net.Uri,
+    val folderPath: String
 )
 
 class MainActivity : ComponentActivity() {
@@ -69,9 +77,11 @@ class MainActivity : ComponentActivity() {
                 mediaController = controller
                 controllerReady.value = true
 
-                audioEffects = AudioEffects(PlaybackService.audioSessionId)
+                audioEffects =
+                    AudioEffects(PlaybackService.audioSessionId)
 
                 val listener = object : Player.Listener {
+
                     override fun onMediaItemTransition(
                         mediaItem: MediaItem?,
                         reason: Int
@@ -105,11 +115,21 @@ class MainActivity : ComponentActivity() {
     private fun loadSongs(): List<Song> {
         val songs = mutableListOf<Song>()
 
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST
-        )
+        val projection = if (Build.VERSION.SDK_INT >= 29) {
+            arrayOf(
+                MediaStore.Audio.Media._ID,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.ARTIST,
+                MediaStore.Audio.Media.RELATIVE_PATH
+            )
+        } else {
+            arrayOf(
+                MediaStore.Audio.Media._ID,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.ARTIST,
+                MediaStore.Audio.Media.DATA
+            )
+        }
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
 
@@ -120,29 +140,71 @@ class MainActivity : ComponentActivity() {
             null,
             "${MediaStore.Audio.Media.TITLE} ASC"
         )?.use { cursor ->
+
             while (cursor.moveToNext()) {
+
                 val id = cursor.getLong(
-                    cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                    cursor.getColumnIndexOrThrow(
+                        MediaStore.Audio.Media._ID
+                    )
                 )
 
                 val title = cursor.getString(
-                    cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                    cursor.getColumnIndexOrThrow(
+                        MediaStore.Audio.Media.TITLE
+                    )
                 ) ?: "Unknown"
 
                 val artist = cursor.getString(
-                    cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                    cursor.getColumnIndexOrThrow(
+                        MediaStore.Audio.Media.ARTIST
+                    )
                 ) ?: "Unknown Artist"
+
+                val folderPath = if (Build.VERSION.SDK_INT >= 29) {
+                    cursor.getString(
+                        cursor.getColumnIndexOrThrow(
+                            MediaStore.Audio.Media.RELATIVE_PATH
+                        )
+                    )?.trim('/') ?: ""
+                } else {
+                    val filePath = cursor.getString(
+                        cursor.getColumnIndexOrThrow(
+                            MediaStore.Audio.Media.DATA
+                        )
+                    )
+                    filePath?.let { File(it).parent } ?: ""
+                }
 
                 val uri = ContentUris.withAppendedId(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                     id
                 )
 
-                songs.add(Song(title, artist, uri))
+                songs.add(
+                    Song(
+                        title = title,
+                        artist = artist,
+                        uri = uri,
+                        folderPath = folderPath
+                    )
+                )
             }
         }
 
         return songs
+    }
+
+    private fun createMediaItem(song: Song): MediaItem {
+        val metadata = MediaMetadata.Builder()
+            .setTitle(song.title)
+            .setArtist(song.artist)
+            .build()
+
+        return MediaItem.Builder()
+            .setUri(song.uri)
+            .setMediaMetadata(metadata)
+            .build()
     }
 
     private fun playSongs(
@@ -154,17 +216,7 @@ class MainActivity : ComponentActivity() {
         val controller = mediaController ?: return
         if (songs.isEmpty()) return
 
-        val items = songs.map { song ->
-            val metadata = MediaMetadata.Builder()
-                .setTitle(song.title)
-                .setArtist(song.artist)
-                .build()
-
-            MediaItem.Builder()
-                .setUri(song.uri)
-                .setMediaMetadata(metadata)
-                .build()
-        }
+        val items = songs.map { createMediaItem(it) }
 
         controller.apply {
             setMediaItems(items, startIndex, 0L)
@@ -179,13 +231,45 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun addToQueue(song: Song) {
+        val controller = mediaController
+
+        if (controller == null) {
+            Toast.makeText(
+                this,
+                "Playback service is not ready",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        val item = createMediaItem(song)
+
+        if (controller.mediaItemCount == 0) {
+            controller.setMediaItem(item)
+            controller.prepare()
+            controller.play()
+        } else {
+            controller.addMediaItem(item)
+        }
+
+        Toast.makeText(
+            this,
+            "Added to current playlist: ${song.title}",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun KGMusicApp() {
+
         var songs by remember { mutableStateOf(emptyList<Song>()) }
         var hasPermission by remember { mutableStateOf(false) }
         var showEqualizer by remember { mutableStateOf(false) }
         var shuffle by remember { mutableStateOf(false) }
         var repeatAll by remember { mutableStateOf(false) }
+        var currentFolder by remember { mutableStateOf<String?>(null) }
 
         val connected by controllerReady
         val currentSong by currentSongState
@@ -213,8 +297,47 @@ class MainActivity : ComponentActivity() {
             if (hasPermission) songs = loadSongs()
         }
 
+        BackHandler(
+            enabled = showEqualizer || currentFolder != null
+        ) {
+            if (showEqualizer) {
+                showEqualizer = false
+            } else {
+                val folder = currentFolder ?: ""
+                val parent = folder.substringBeforeLast(
+                    "/",
+                    missingDelimiterValue = ""
+                )
+                currentFolder = parent.ifEmpty { null }
+            }
+        }
+
         val black = Color(0xFF080808)
         val gold = Color(0xFFFFC400)
+
+        val folderNames = remember(songs, currentFolder) {
+            val prefix = currentFolder?.let { "$it/" } ?: ""
+
+            songs.mapNotNull { song ->
+                val path = song.folderPath
+
+                if (path == currentFolder || path.isEmpty()) {
+                    null
+                } else if (path.startsWith(prefix)) {
+                    path.removePrefix(prefix)
+                        .substringBefore("/")
+                        .takeIf { it.isNotEmpty() }
+                } else {
+                    null
+                }
+            }.distinct().sorted()
+        }
+
+        val visibleSongs = remember(songs, currentFolder) {
+            songs.filter {
+                it.folderPath == (currentFolder ?: "")
+            }
+        }
 
         MaterialTheme(
             colorScheme = darkColorScheme(
@@ -223,22 +346,36 @@ class MainActivity : ComponentActivity() {
                 primary = gold
             )
         ) {
+
             if (showEqualizer) {
+
                 EqualizerScreen(
                     onBack = { showEqualizer = false },
                     audioEffects = audioEffects
                 )
+
             } else {
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(black)
                         .padding(18.dp)
                 ) {
-                    Text("🎧 KG", color = gold, fontSize = 38.sp)
-                    Text("MUSIC PLAYER", color = Color.White, fontSize = 20.sp)
 
-                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "🎧 KG",
+                        color = gold,
+                        fontSize = 38.sp
+                    )
+
+                    Text(
+                        "MUSIC PLAYER",
+                        color = Color.White,
+                        fontSize = 20.sp
+                    )
+
+                    Spacer(Modifier.height(8.dp))
 
                     Text(
                         if (connected) "PLAYBACK SERVICE CONNECTED"
@@ -247,7 +384,7 @@ class MainActivity : ComponentActivity() {
                         fontSize = 11.sp
                     )
 
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(12.dp))
 
                     Button(
                         onClick = { showEqualizer = true },
@@ -256,65 +393,212 @@ class MainActivity : ComponentActivity() {
                         Text("OPEN SOUND ENGINE • EQ")
                     }
 
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     Button(
-                        onClick = { playSongs(songs, 0, shuffle, repeatAll) },
+                        onClick = {
+                            playSongs(songs, 0, shuffle, repeatAll)
+                        },
                         enabled = connected && songs.isNotEmpty(),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("▶ PLAY ALL SONGS")
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(14.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("MY MUSIC", color = Color.White)
-                        Text("${songs.size} Songs", color = gold)
+                        Text(
+                            "MY MUSIC",
+                            color = Color.White,
+                            fontSize = 18.sp
+                        )
+
+                        Text(
+                            "${songs.size} Songs",
+                            color = gold
+                        )
+                    }
+
+                    if (currentFolder != null) {
+
+                        TextButton(
+                            onClick = {
+                                val folder = currentFolder ?: ""
+                                val parent = folder.substringBeforeLast(
+                                    "/",
+                                    missingDelimiterValue = ""
+                                )
+                                currentFolder = parent.ifEmpty { null }
+                            }
+                        ) {
+                            Text(
+                                "← Back  •  ${currentFolder?.substringAfterLast("/")}",
+                                color = gold
+                            )
+                        }
+
+                        Text(
+                            currentFolder ?: "",
+                            color = Color.Gray,
+                            fontSize = 11.sp
+                        )
                     }
 
                     Spacer(Modifier.height(8.dp))
 
                     if (!hasPermission) {
+
                         Button(
-                            onClick = { permissionLauncher.launch(permission) }
+                            onClick = {
+                                permissionLauncher.launch(permission)
+                            }
                         ) {
                             Text("ALLOW MUSIC ACCESS")
                         }
+
                     } else if (songs.isEmpty()) {
+
                         Text(
                             "No music found on your phone.",
                             color = Color.LightGray
                         )
+
                     } else {
-                        LazyColumn(modifier = Modifier.weight(1f)) {
-                            items(songs) { song ->
-                                Column(
+
+                        LazyColumn(
+                            modifier = Modifier.weight(1f)
+                        ) {
+
+                            items(
+                                folderNames,
+                                key = { "folder-$it" }
+                            ) { folder ->
+
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
-                                            val index = songs.indexOf(song)
-                                            playSongs(
-                                                songs,
-                                                index,
-                                                shuffle,
-                                                repeatAll
-                                            )
+                                            currentFolder =
+                                                if (currentFolder == null) {
+                                                    folder
+                                                } else {
+                                                    "${currentFolder}/$folder"
+                                                }
                                         }
-                                        .padding(vertical = 12.dp)
+                                        .padding(vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(song.title, color = Color.White)
+
+                                    Icon(
+                                        Icons.Default.Folder,
+                                        contentDescription = "Folder",
+                                        tint = gold
+                                    )
+
+                                    Spacer(Modifier.width(12.dp))
+
                                     Text(
-                                        song.artist,
-                                        color = Color.Gray,
-                                        fontSize = 12.sp
+                                        folder,
+                                        color = Color.White,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    Text(
+                                        "OPEN  ›",
+                                        color = gold,
+                                        fontSize = 11.sp
                                     )
                                 }
 
-                                HorizontalDivider(color = Color.DarkGray)
+                                HorizontalDivider(
+                                    color = Color.DarkGray
+                                )
+                            }
+
+                            items(
+                                visibleSongs,
+                                key = { it.uri.toString() }
+                            ) { song ->
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .combinedClickable(
+                                            onClick = {
+                                                val index =
+                                                    visibleSongs.indexOf(song)
+
+                                                playSongs(
+                                                    visibleSongs,
+                                                    index,
+                                                    shuffle,
+                                                    repeatAll
+                                                )
+                                            },
+                                            onLongClick = {
+                                                addToQueue(song)
+                                            }
+                                        )
+                                        .padding(vertical = 13.dp)
+                                ) {
+
+                                    Row(
+                                        verticalAlignment =
+                                            Alignment.CenterVertically
+                                    ) {
+
+                                        Icon(
+                                            Icons.Default.MusicNote,
+                                            contentDescription = "Song",
+                                            tint = gold
+                                        )
+
+                                        Spacer(Modifier.width(12.dp))
+
+                                        Column(
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+
+                                            Text(
+                                                song.title,
+                                                color = Color.White
+                                            )
+
+                                            Text(
+                                                song.artist,
+                                                color = Color.Gray,
+                                                fontSize = 12.sp
+                                            )
+                                        }
+
+                                        Text(
+                                            "HOLD TO ADD",
+                                            color = Color.Gray,
+                                            fontSize = 9.sp
+                                        )
+                                    }
+                                }
+
+                                HorizontalDivider(
+                                    color = Color.DarkGray
+                                )
+                            }
+
+                            if (folderNames.isEmpty() &&
+                                visibleSongs.isEmpty()
+                            ) {
+                                item {
+                                    Text(
+                                        "No music in this folder.",
+                                        color = Color.LightGray,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -326,18 +610,34 @@ class MainActivity : ComponentActivity() {
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text("NOW PLAYING", color = gold)
-                            Text(currentSong, color = Color.White)
+
+                        Column(
+                            modifier = Modifier.padding(14.dp)
+                        ) {
+
+                            Text(
+                                "NOW PLAYING",
+                                color = gold
+                            )
+
+                            Text(
+                                currentSong,
+                                color = Color.White
+                            )
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
-                                verticalAlignment = Alignment.CenterVertically
+                                horizontalArrangement =
+                                    Arrangement.SpaceEvenly,
+                                verticalAlignment =
+                                    Alignment.CenterVertically
                             ) {
+
                                 TextButton(
                                     enabled = connected,
-                                    onClick = { mediaController?.seekToPrevious() }
+                                    onClick = {
+                                        mediaController?.seekToPrevious()
+                                    }
                                 ) {
                                     Text("PREV", color = gold)
                                 }
@@ -351,12 +651,16 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 ) {
-                                    Text(if (isPlaying) "PAUSE" else "PLAY")
+                                    Text(
+                                        if (isPlaying) "PAUSE" else "PLAY"
+                                    )
                                 }
 
                                 TextButton(
                                     enabled = connected,
-                                    onClick = { mediaController?.seekToNext() }
+                                    onClick = {
+                                        mediaController?.seekToNext()
+                                    }
                                 ) {
                                     Text("NEXT", color = gold)
                                 }
@@ -364,18 +668,23 @@ class MainActivity : ComponentActivity() {
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly
+                                horizontalArrangement =
+                                    Arrangement.SpaceEvenly
                             ) {
+
                                 TextButton(
                                     enabled = connected,
                                     onClick = {
                                         shuffle = !shuffle
-                                        mediaController?.shuffleModeEnabled = shuffle
+                                        mediaController?.shuffleModeEnabled =
+                                            shuffle
                                     }
                                 ) {
                                     Text(
-                                        if (shuffle) "SHUFFLE ON" else "SHUFFLE OFF",
-                                        color = if (shuffle) gold else Color.Gray
+                                        if (shuffle) "SHUFFLE ON"
+                                        else "SHUFFLE OFF",
+                                        color = if (shuffle) gold
+                                        else Color.Gray
                                     )
                                 }
 
@@ -383,14 +692,20 @@ class MainActivity : ComponentActivity() {
                                     enabled = connected,
                                     onClick = {
                                         repeatAll = !repeatAll
+
                                         mediaController?.repeatMode =
-                                            if (repeatAll) Player.REPEAT_MODE_ALL
-                                            else Player.REPEAT_MODE_OFF
+                                            if (repeatAll) {
+                                                Player.REPEAT_MODE_ALL
+                                            } else {
+                                                Player.REPEAT_MODE_OFF
+                                            }
                                     }
                                 ) {
                                     Text(
-                                        if (repeatAll) "REPEAT ON" else "REPEAT OFF",
-                                        color = if (repeatAll) gold else Color.Gray
+                                        if (repeatAll) "REPEAT ON"
+                                        else "REPEAT OFF",
+                                        color = if (repeatAll) gold
+                                        else Color.Gray
                                     )
                                 }
                             }
