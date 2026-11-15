@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
                 mediaController = controller
                 controllerReady.value = true
 
-                audioEffects = AudioEffects(controller.audioSessionId)
+                audioEffects = AudioEffects(PlaybackService.audioSessionId)
 
                 val listener = object : Player.Listener {
                     override fun onMediaItemTransition(
