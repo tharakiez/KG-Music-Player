@@ -61,7 +61,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         connectPlaybackService()
-        setContent { KGMusicApp() }
+        setContent {
+            KGMusicApp()
+        }
     }
 
     private fun connectPlaybackService() {
@@ -78,8 +80,9 @@ class MainActivity : ComponentActivity() {
                 mediaController = controller
                 controllerReady.value = true
 
-                audioEffects =
-                    AudioEffects(PlaybackService.audioSessionId)
+                audioEffects = AudioEffects(
+                    PlaybackService.audioSessionId
+                )
 
                 val listener = object : Player.Listener {
 
@@ -295,7 +298,9 @@ class MainActivity : ComponentActivity() {
                 permission
             ) == PackageManager.PERMISSION_GRANTED
 
-            if (hasPermission) songs = loadSongs()
+            if (hasPermission) {
+                songs = loadSongs()
+            }
         }
 
         BackHandler(
@@ -438,7 +443,7 @@ class MainActivity : ComponentActivity() {
                             }
                         ) {
                             Text(
-                                "← Back  •  ${currentFolder?.substringAfterLast("/")}",
+                                "← Back • ${currentFolder?.substringAfterLast("/")}",
                                 color = gold
                             )
                         }
@@ -576,5 +581,144 @@ class MainActivity : ComponentActivity() {
                                                 fontSize = 12.sp
                                             )
                                         }
+                                    }
+                                }
 
-                                 
+                                HorizontalDivider(
+                                    color = Color.DarkGray
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF171717)
+                        )
+                    ) {
+
+                        Column(
+                            modifier = Modifier.padding(14.dp)
+                        ) {
+
+                            Text(
+                                "NOW PLAYING",
+                                color = gold,
+                                fontSize = 11.sp
+                            )
+
+                            Spacer(Modifier.height(4.dp))
+
+                            Text(
+                                currentSong,
+                                color = Color.White,
+                                fontSize = 16.sp
+                            )
+
+                            Spacer(Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+
+                                TextButton(
+                                    onClick = {
+                                        shuffle = !shuffle
+                                        mediaController?.shuffleModeEnabled =
+                                            shuffle
+                                    }
+                                ) {
+                                    Text(
+                                        if (shuffle) "SHUFFLE ON" else "SHUFFLE",
+                                        color = if (shuffle) gold else Color.Gray
+                                    )
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        mediaController?.seekToPrevious()
+                                    },
+                                    enabled = connected
+                                ) {
+                                    Text(
+                                        "⏮",
+                                        color = gold,
+                                        fontSize = 24.sp
+                                    )
+                                }
+
+                                Button(
+                                    onClick = {
+                                        mediaController?.let { controller ->
+                                            if (controller.isPlaying) {
+                                                controller.pause()
+                                            } else {
+                                                controller.play()
+                                            }
+                                        }
+                                    },
+                                    enabled = connected
+                                ) {
+                                    Text(
+                                        if (isPlaying) "Ⅱ" else "▶",
+                                        fontSize = 22.sp
+                                    )
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        mediaController?.seekToNext()
+                                    },
+                                    enabled = connected
+                                ) {
+                                    Text(
+                                        "⏭",
+                                        color = gold,
+                                        fontSize = 24.sp
+                                    )
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        repeatAll = !repeatAll
+                                        mediaController?.repeatMode =
+                                            if (repeatAll) {
+                                                Player.REPEAT_MODE_ALL
+                                            } else {
+                                                Player.REPEAT_MODE_OFF
+                                            }
+                                    }
+                                ) {
+                                    Text(
+                                        if (repeatAll) "REPEAT ON" else "REPEAT",
+                                        color = if (repeatAll) gold else Color.Gray
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        controllerListener?.let { listener ->
+            mediaController?.removeListener(listener)
+        }
+
+        mediaController?.release()
+        mediaController = null
+
+        audioEffects?.release()
+        audioEffects = null
+
+        super.onDestroy()
+    }
+}
