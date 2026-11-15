@@ -1,6 +1,7 @@
 
 package com.kgmusic.player
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,8 +11,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 @Composable
 fun EqualizerScreen(
@@ -21,20 +24,66 @@ fun EqualizerScreen(
     val gold = Color(0xFFFFC400)
     val black = Color(0xFF080808)
 
+    val context = LocalContext.current
+
+    val preferences = remember(context) {
+        context.getSharedPreferences(
+            "kg_sound_settings",
+            Context.MODE_PRIVATE
+        )
+    }
+
     val frequencies = listOf(
         "31 Hz", "62 Hz", "125 Hz", "250 Hz", "500 Hz",
         "1 kHz", "2 kHz", "4 kHz", "8 kHz", "16 kHz"
     )
 
-    val levels = remember {
-        mutableStateListOf<Float>().apply {
-            repeat(10) { add(0f) }
+    val savedLevels = remember(preferences) {
+        List(10) { index ->
+            preferences.getFloat("eq_$index", 0f)
         }
     }
 
-    var bass by remember { mutableFloatStateOf(0f) }
-    var volume by remember { mutableFloatStateOf(100f) }
-    var preset by remember { mutableStateOf("Normal") }
+    val levels = remember {
+        mutableStateListOf<Float>().apply {
+            addAll(savedLevels)
+        }
+    }
+
+    var bass by remember {
+        mutableFloatStateOf(
+            preferences.getFloat("bass", 0f)
+        )
+    }
+
+    var volume by remember {
+        mutableFloatStateOf(
+            preferences.getFloat("volume", 100f)
+        )
+    }
+
+    var preset by remember {
+        mutableStateOf(
+            preferences.getString("preset", "Normal") ?: "Normal"
+        )
+    }
+
+    var expanded by remember { mutableStateOf(false) }
+
+    // Restore saved settings whenever the audio effect engine is available.
+    LaunchedEffect(audioEffects) {
+        audioEffects?.let { effects ->
+            levels.forEachIndexed { index, value ->
+                effects.setEqualizerBand(
+                    index,
+                    (value * 100).toInt()
+                )
+            }
+
+            effects.setBassBoost((bass * 10).toInt())
+            effects.setVolumeBoost(volume.toInt())
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -63,8 +112,6 @@ fun EqualizerScreen(
 
         Text("PRESETS", color = gold)
 
-        var expanded by remember { mutableStateOf(false) }
-
         Box {
             OutlinedButton(
                 onClick = { expanded = true },
@@ -85,6 +132,7 @@ fun EqualizerScreen(
                         text = { Text(option) },
                         onClick = {
                             preset = option
+
                             val values = when (option) {
                                 "Rock" -> listOf(4f, 3f, -1f, -2f, 1f, 3f, 4f, 4f, 3f, 3f)
                                 "Pop" -> listOf(-1f, 2f, 4f, 4f, 1f, -1f, -1f, 0f, 2f, 2f)
@@ -97,11 +145,20 @@ fun EqualizerScreen(
 
                             values.forEachIndexed { index, value ->
                                 levels[index] = value
+
                                 audioEffects?.setEqualizerBand(
                                     index,
                                     (value * 100).toInt()
                                 )
                             }
+
+                            preferences.edit().apply {
+                                putString("preset", option)
+
+                                values.forEachIndexed { index, value ->
+                                    putFloat("eq_$index", value)
+                                }
+                            }.apply()
 
                             expanded = false
                         }
@@ -119,6 +176,7 @@ fun EqualizerScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(frequency, color = Color.White)
+
                     Text(
                         "${levels[index].toInt()} dB",
                         color = gold
@@ -127,12 +185,19 @@ fun EqualizerScreen(
 
                 Slider(
                     value = levels[index],
-                    onValueChange = {
-                        levels[index] = it
+                    onValueChange = { value ->
+                        levels[index] = value
+                        preset = "Custom"
+
                         audioEffects?.setEqualizerBand(
                             index,
-                            (it * 100).toInt()
+                            (value * 100).toInt()
                         )
+
+                        preferences.edit()
+                            .putFloat("eq_$index", value)
+                            .putString("preset", "Custom")
+                            .apply()
                     },
                     valueRange = -15f..15f,
                     colors = SliderDefaults.colors(
@@ -151,9 +216,16 @@ fun EqualizerScreen(
 
         Slider(
             value = bass,
-            onValueChange = {
-                bass = it
-                audioEffects?.setBassBoost((it * 10).toInt())
+            onValueChange = { value ->
+                bass = value
+
+                audioEffects?.setBassBoost(
+                    (value * 10).toInt()
+                )
+
+                preferences.edit()
+                    .putFloat("bass", value)
+                    .apply()
             },
             valueRange = 0f..100f,
             colors = SliderDefaults.colors(
@@ -170,9 +242,14 @@ fun EqualizerScreen(
 
         Slider(
             value = volume,
-            onValueChange = {
-                volume = it
-                audioEffects?.setVolumeBoost(it.toInt())
+            onValueChange = { value ->
+                volume = value
+
+                audioEffects?.setVolumeBoost(value.toInt())
+
+                preferences.edit()
+                    .putFloat("volume", value)
+                    .apply()
             },
             valueRange = 100f..200f,
             colors = SliderDefaults.colors(
@@ -197,9 +274,9 @@ fun EqualizerScreen(
 
         Button(
             onClick = {
-                levels.indices.forEach {
-                    levels[it] = 0f
-                    audioEffects?.setEqualizerBand(it, 0)
+                levels.indices.forEach { index ->
+                    levels[index] = 0f
+                    audioEffects?.setEqualizerBand(index, 0)
                 }
 
                 bass = 0f
@@ -208,6 +285,16 @@ fun EqualizerScreen(
 
                 audioEffects?.setBassBoost(0)
                 audioEffects?.setVolumeBoost(100)
+
+                preferences.edit().apply {
+                    for (index in 0 until 10) {
+                        putFloat("eq_$index", 0f)
+                    }
+
+                    putFloat("bass", 0f)
+                    putFloat("volume", 100f)
+                    putString("preset", "Normal")
+                }.apply()
             },
             modifier = Modifier.fillMaxWidth()
         ) {
