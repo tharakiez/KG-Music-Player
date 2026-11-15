@@ -13,8 +13,26 @@ android {
         applicationId = "com.kgmusic.player"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file(System.getenv("KEYSTORE_FILE") ?: "kgmusic-release.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("KEY_ALIAS")
+            keyPassword = System.getenv("KEYSTORE_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("release")
+        }
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     compileOptions {
