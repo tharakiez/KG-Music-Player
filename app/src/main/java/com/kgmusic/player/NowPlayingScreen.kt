@@ -1,4 +1,3 @@
-
 package com.kgmusic.player
 
 import androidx.compose.foundation.Image
@@ -29,18 +28,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.media3.common.Player
+import androidx.compose.ui.layout.ContentScale
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.session.MediaController
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 private val KGBlack = Color(0xFF090706)
 private val KGCopper = Color(0xFFB87333)
 private val KGLightGold = Color(0xFFE0B16D)
-private val KGBronze = Color(0xFF75421F)
 private val KGPanel = Color(0xFF1C1511)
 private val KGMuted = Color(0xFFAA9380)
 
@@ -70,21 +69,28 @@ fun NowPlayingScreen(
     var showSleepDialog by remember { mutableStateOf(false) }
     var sleepLabel by remember { mutableStateOf("Sleep timer") }
     var sleepJob by remember { mutableStateOf<Job?>(null) }
+
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(controller) {
         while (true) {
             controller?.let {
                 val actualDuration = it.duration
-                if (actualDuration > 0L && actualDuration != Player.TIME_UNSET) {
+
+                if (actualDuration > 0L &&
+                    actualDuration != C.TIME_UNSET
+                ) {
                     duration = actualDuration
                 }
+
                 if (!dragging) {
                     position = it.currentPosition.coerceAtLeast(0L)
                     sliderPosition = position.toFloat()
                 }
+
                 speed = it.playbackParameters.speed
             }
+
             delay(400)
         }
     }
@@ -99,6 +105,7 @@ fun NowPlayingScreen(
     fun changeSpeed(amount: Float) {
         val nextSpeed = (speed + amount).coerceIn(0.5f, 2f)
         speed = nextSpeed
+
         controller?.setPlaybackParameters(
             PlaybackParameters(nextSpeed, 1f)
         )
@@ -110,6 +117,8 @@ fun NowPlayingScreen(
             .background(KGBlack)
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
+
+        // TOP BAR
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -130,6 +139,7 @@ fun NowPlayingScreen(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
                 )
+
                 Text(
                     "AFRICAN RHYTHM",
                     color = KGMuted,
@@ -145,6 +155,7 @@ fun NowPlayingScreen(
                     tint = KGLightGold
                 )
             }
+
             IconButton(onClick = onOpenPlaylists) {
                 Icon(
                     Icons.Default.PlaylistPlay,
@@ -152,6 +163,7 @@ fun NowPlayingScreen(
                     tint = KGLightGold
                 )
             }
+
             IconButton(onClick = { showSleepDialog = true }) {
                 Icon(
                     Icons.Default.Timer,
@@ -163,12 +175,15 @@ fun NowPlayingScreen(
 
         Spacer(Modifier.height(10.dp))
 
+        // MAIN PLAYER CARD
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = KGPanel),
+            colors = CardDefaults.cardColors(
+                containerColor = KGPanel
+            ),
             border = androidx.compose.foundation.BorderStroke(
                 1.dp,
                 KGCopper.copy(alpha = 0.75f)
@@ -180,6 +195,7 @@ fun NowPlayingScreen(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+
                 Text(
                     "BANJUKA ARTS",
                     color = KGLightGold,
@@ -190,8 +206,11 @@ fun NowPlayingScreen(
 
                 Spacer(Modifier.height(10.dp))
 
+                // YOUR PORTRAIT
                 Image(
-                    painter = painterResource(id = R.drawable.kg_portrait),
+                    painter = painterResource(
+                        id = R.drawable.kg_portrait
+                    ),
                     contentDescription = "KG Music artwork",
                     modifier = Modifier
                         .fillMaxWidth()
@@ -202,7 +221,7 @@ fun NowPlayingScreen(
                             KGCopper,
                             RoundedCornerShape(18.dp)
                         ),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    contentScale = ContentScale.Crop
                 )
 
                 Spacer(Modifier.height(12.dp))
@@ -226,6 +245,7 @@ fun NowPlayingScreen(
 
                 Spacer(Modifier.height(8.dp))
 
+                // SEEK BAR
                 Slider(
                     value = sliderPosition.coerceIn(
                         0f,
@@ -236,8 +256,11 @@ fun NowPlayingScreen(
                         sliderPosition = it
                     },
                     onValueChangeFinished = {
-                        controller?.seekTo(sliderPosition.roundToInt().toLong())
-                        position = sliderPosition.roundToInt().toLong()
+                        controller?.seekTo(
+                            sliderPosition.roundToLong()
+                        )
+
+                        position = sliderPosition.roundToLong()
                         dragging = false
                     },
                     valueRange = 0f..duration.coerceAtLeast(1L).toFloat(),
@@ -253,12 +276,22 @@ fun NowPlayingScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(formatTime(position), color = KGMuted, fontSize = 10.sp)
-                    Text(formatTime(duration), color = KGMuted, fontSize = 10.sp)
+                    Text(
+                        formatTime(position),
+                        color = KGMuted,
+                        fontSize = 10.sp
+                    )
+
+                    Text(
+                        formatTime(duration),
+                        color = KGMuted,
+                        fontSize = 10.sp
+                    )
                 }
 
                 Spacer(Modifier.height(6.dp))
 
+                // SPEED AND SEEK CONTROLS
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -267,19 +300,30 @@ fun NowPlayingScreen(
                     TextButton(
                         onClick = {
                             controller?.let {
-                                it.seekTo((it.currentPosition - 10_000L).coerceAtLeast(0L))
+                                it.seekTo(
+                                    (it.currentPosition - 10_000L)
+                                        .coerceAtLeast(0L)
+                                )
                             }
                         },
                         enabled = connected
                     ) {
-                        Text("−10 SEC", color = KGLightGold, fontSize = 10.sp)
+                        Text(
+                            "−10 SEC",
+                            color = KGLightGold,
+                            fontSize = 10.sp
+                        )
                     }
 
                     TextButton(
                         onClick = { changeSpeed(-0.1f) },
                         enabled = connected
                     ) {
-                        Text("SLOW DOWN", color = KGLightGold, fontSize = 9.sp)
+                        Text(
+                            "SLOW DOWN",
+                            color = KGLightGold,
+                            fontSize = 9.sp
+                        )
                     }
 
                     Text(
@@ -293,7 +337,11 @@ fun NowPlayingScreen(
                         onClick = { changeSpeed(0.1f) },
                         enabled = connected
                     ) {
-                        Text("SPEED UP", color = KGLightGold, fontSize = 9.sp)
+                        Text(
+                            "SPEED UP",
+                            color = KGLightGold,
+                            fontSize = 9.sp
+                        )
                     }
 
                     TextButton(
@@ -307,18 +355,27 @@ fun NowPlayingScreen(
                         },
                         enabled = connected
                     ) {
-                        Text("+10 SEC", color = KGLightGold, fontSize = 10.sp)
+                        Text(
+                            "+10 SEC",
+                            color = KGLightGold,
+                            fontSize = 10.sp
+                        )
                     }
                 }
 
                 Spacer(Modifier.height(4.dp))
 
+                // MAIN PLAYBACK CONTROLS
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { onShuffleChange(!shuffle) }) {
+                    IconButton(
+                        onClick = {
+                            onShuffleChange(!shuffle)
+                        }
+                    ) {
                         Icon(
                             Icons.Default.Shuffle,
                             contentDescription = "Shuffle",
@@ -327,20 +384,33 @@ fun NowPlayingScreen(
                     }
 
                     IconButton(
-                        onClick = { controller?.seekToPrevious() },
+                        onClick = {
+                            controller?.seekToPrevious()
+                        },
                         enabled = connected
                     ) {
-                        Text("⏮", color = KGLightGold, fontSize = 23.sp)
+                        Text(
+                            "⏮",
+                            color = KGLightGold,
+                            fontSize = 23.sp
+                        )
                     }
 
                     Button(
                         onClick = {
                             controller?.let {
-                                if (it.isPlaying) it.pause() else it.play()
+                                if (it.isPlaying) {
+                                    it.pause()
+                                } else {
+                                    it.play()
+                                }
                             }
                         },
                         enabled = connected,
-                        modifier = Modifier.size(width = 66.dp, height = 50.dp),
+                        modifier = Modifier.size(
+                            width = 66.dp,
+                            height = 50.dp
+                        ),
                         shape = RoundedCornerShape(15.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = KGCopper
@@ -354,10 +424,16 @@ fun NowPlayingScreen(
                     }
 
                     IconButton(
-                        onClick = { controller?.seekToNext() },
+                        onClick = {
+                            controller?.seekToNext()
+                        },
                         enabled = connected
                     ) {
-                        Text("⏭", color = KGLightGold, fontSize = 23.sp)
+                        Text(
+                            "⏭",
+                            color = KGLightGold,
+                            fontSize = 23.sp
+                        )
                     }
 
                     IconButton(
@@ -366,10 +442,17 @@ fun NowPlayingScreen(
                         }
                     ) {
                         Icon(
-                            if (repeatMode == 2) Icons.Default.RepeatOne
-                            else Icons.Default.Repeat,
+                            if (repeatMode == 2) {
+                                Icons.Default.RepeatOne
+                            } else {
+                                Icons.Default.Repeat
+                            },
                             contentDescription = "Repeat",
-                            tint = if (repeatMode == 0) KGMuted else KGLightGold
+                            tint = if (repeatMode == 0) {
+                                KGMuted
+                            } else {
+                                KGLightGold
+                            }
                         )
                     }
                 }
@@ -395,6 +478,7 @@ fun NowPlayingScreen(
 
         Spacer(Modifier.height(12.dp))
 
+        // PLAYING QUEUE
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -407,6 +491,7 @@ fun NowPlayingScreen(
                 letterSpacing = 2.sp,
                 modifier = Modifier.weight(1f)
             )
+
             Text(
                 "${queue.size} TRACKS",
                 color = KGMuted,
@@ -424,6 +509,7 @@ fun NowPlayingScreen(
                 queue,
                 key = { index, track -> "$index-${track.uri}" }
             ) { index, track ->
+
                 val current = index == currentQueueIndex
 
                 Row(
@@ -431,27 +517,48 @@ fun NowPlayingScreen(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
                         .background(
-                            if (current) Color(0xFF302016)
-                            else Color.Transparent
+                            if (current) {
+                                Color(0xFF302016)
+                            } else {
+                                Color.Transparent
+                            }
                         )
-                        .clickable { onSelectQueueItem(index) }
-                        .padding(horizontal = 10.dp, vertical = 9.dp),
+                        .clickable {
+                            onSelectQueueItem(index)
+                        }
+                        .padding(
+                            horizontal = 10.dp,
+                            vertical = 9.dp
+                        ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         Icons.Default.MusicNote,
                         contentDescription = null,
-                        tint = if (current) KGLightGold else KGCopper
+                        tint = if (current) {
+                            KGLightGold
+                        } else {
+                            KGCopper
+                        }
                     )
+
                     Spacer(Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Text(
                             track.title,
-                            color = if (current) KGLightGold else Color.White,
+                            color = if (current) {
+                                KGLightGold
+                            } else {
+                                Color.White
+                            },
                             fontSize = 12.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+
                         Text(
                             track.artist,
                             color = KGMuted,
@@ -459,20 +566,31 @@ fun NowPlayingScreen(
                             maxLines = 1
                         )
                     }
+
                     if (current) {
-                        Text("PLAYING", color = KGLightGold, fontSize = 9.sp)
+                        Text(
+                            "PLAYING",
+                            color = KGLightGold,
+                            fontSize = 9.sp
+                        )
                     }
                 }
             }
         }
     }
 
+    // SLEEP TIMER
     if (showSleepDialog) {
         AlertDialog(
-            onDismissRequest = { showSleepDialog = false },
+            onDismissRequest = {
+                showSleepDialog = false
+            },
             containerColor = KGPanel,
             title = {
-                Text("SLEEP TIMER", color = KGLightGold)
+                Text(
+                    "SLEEP TIMER",
+                    color = KGLightGold
+                )
             },
             text = {
                 Column {
@@ -480,22 +598,29 @@ fun NowPlayingScreen(
                         "Pause music after:",
                         color = Color.White
                     )
+
                     listOf(15, 30, 45, 60).forEach { minutes ->
                         TextButton(
                             onClick = {
                                 sleepJob?.cancel()
                                 sleepLabel = "Sleep in $minutes min"
+
                                 sleepJob = scope.launch {
                                     delay(minutes * 60_000L)
                                     controller?.pause()
                                     sleepLabel = "Sleep timer finished"
                                 }
+
                                 showSleepDialog = false
                             }
                         ) {
-                            Text("$minutes minutes", color = KGLightGold)
+                            Text(
+                                "$minutes minutes",
+                                color = KGLightGold
+                            )
                         }
                     }
+
                     TextButton(
                         onClick = {
                             sleepJob?.cancel()
@@ -504,13 +629,23 @@ fun NowPlayingScreen(
                             showSleepDialog = false
                         }
                     ) {
-                        Text("CANCEL TIMER", color = KGMuted)
+                        Text(
+                            "CANCEL TIMER",
+                            color = KGMuted
+                        )
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showSleepDialog = false }) {
-                    Text("CLOSE", color = KGLightGold)
+                TextButton(
+                    onClick = {
+                        showSleepDialog = false
+                    }
+                ) {
+                    Text(
+                        "CLOSE",
+                        color = KGLightGold
+                    )
                 }
             }
         )
