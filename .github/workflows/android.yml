@@ -7,6 +7,7 @@ on:
     branches:
       - main
       - master
+      - feature/player-tools-and-playlists
 
 jobs:
   build:
@@ -45,4 +46,3 @@ jobs:
         with:
           name: KG-Music-Player-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-          
