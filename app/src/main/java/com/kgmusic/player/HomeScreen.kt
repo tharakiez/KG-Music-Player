@@ -32,7 +32,7 @@ fun HomeScreen(
     onOpenEqualizer: () -> Unit,
     onOpenPlaylists: () -> Unit,
     onExit: () -> Unit,
-    onPlaySong: (Song) -> Unit,
+    onPlaySongs: (List<Song>, Int) -> Unit,
     onOpenQueue: () -> Unit,
     onPrevious: () -> Unit,
     onTogglePlayback: () -> Unit,
@@ -54,15 +54,164 @@ fun HomeScreen(
     var section by remember { mutableStateOf("Home") }
     var selectedFolder by remember { mutableStateOf<String?>(null) }
 
-    // Handle phone Back before allowing the activity to close.
+    var showSubfolderPrompt by remember { mutableStateOf(false) }
+    var pendingSong by remember { mutableStateOf<Song?>(null) }
+
+    fun normalizedPath(path: String): String {
+        return path.trim('/')
+    }
+
+    fun parentPath(path: String): String {
+        val clean = normalizedPath(path)
+        return clean.substringBeforeLast(
+            "/",
+            missingDelimiterValue = ""
+        )
+    }
+
+    fun folderName(path: String): String {
+        return normalizedPath(path).substringAfterLast('/')
+    }
+
+    fun directSongs(path: String): List<Song> {
+        return songs.filter {
+            normalizedPath(it.folderPath) == normalizedPath(path)
+        }.sortedBy { it.title.lowercase() }
+    }
+
+    fun childFolders(path: String): List<String> {
+        val parent = normalizedPath(path)
+
+        return songs.mapNotNull { song ->
+            val clean = normalizedPath(song.folderPath)
+
+            if (clean.isBlank() || clean == parent) {
+                null
+            } else {
+                val belongsToParent = if (parent.isBlank()) {
+                    true
+                } else {
+                    clean.startsWith("$parent/")
+                }
+
+                if (!belongsToParent) {
+                    null
+                } else {
+                    val remainder = if (parent.isBlank()) {
+                        clean
+                    } else {
+                        clean.removePrefix("$parent/")
+                    }
+
+                    remainder.substringBefore('/')
+                        .takeIf { it.isNotBlank() }
+                        ?.let { name ->
+                            if (parent.isBlank()) name
+                            else "$parent/$name"
+                        }
+                }
+            }
+        }.distinct().sortedBy { it.lowercase() }
+    }
+
+    fun songsInFolder(path: String, includeSubfolders: Boolean): List<Song> {
+        val clean = normalizedPath(path)
+
+        return songs.filter { song ->
+            val songPath = normalizedPath(song.folderPath)
+
+            if (includeSubfolders) {
+                songPath == clean || songPath.startsWith("$clean/")
+            } else {
+                songPath == clean
+            }
+        }.sortedWith(
+            compareBy<Song>(
+                { normalizedPath(it.folderPath).lowercase() },
+                { it.title.lowercase() }
+            )
+        )
+    }
+
+    fun playSelectedFolder(includeSubfolders: Boolean) {
+        val folder = selectedFolder ?: return
+        val folderSongs = songsInFolder(folder, includeSubfolders)
+
+        if (folderSongs.isNotEmpty()) {
+            onPlaySongs(folderSongs, 0)
+        }
+
+        showSubfolderPrompt = false
+        pendingSong = null
+    }
+
+    fun requestFolderPlayback(song: Song? = null) {
+        val folder = selectedFolder ?: return
+        val children = childFolders(folder)
+
+        if (children.isNotEmpty()) {
+            pendingSong = song
+            showSubfolderPrompt = true
+        } else {
+            val folderSongs = directSongs(folder)
+            val startIndex = if (song == null) {
+                0
+            } else {
+                folderSongs.indexOfFirst { it.uri == song.uri }
+                    .coerceAtLeast(0)
+            }
+
+            if (folderSongs.isNotEmpty()) {
+                onPlaySongs(folderSongs, startIndex)
+            }
+        }
+    }
+
+    fun playFolderChoice(includeSubfolders: Boolean) {
+        val folder = selectedFolder ?: return
+        val folderSongs = songsInFolder(folder, includeSubfolders)
+        val selectedSong = pendingSong
+
+        val startIndex = if (selectedSong == null) {
+            0
+        } else {
+            folderSongs.indexOfFirst {
+                it.uri == selectedSong.uri
+            }.coerceAtLeast(0)
+        }
+
+        if (folderSongs.isNotEmpty()) {
+            onPlaySongs(folderSongs, startIndex)
+        }
+
+        showSubfolderPrompt = false
+        pendingSong = null
+    }
+
     BackHandler(
         enabled = drawerOpen || menuOpen ||
-            searchOpen || section != "Home"
+            showSubfolderPrompt || searchOpen || section != "Home"
     ) {
         when {
+            showSubfolderPrompt -> {
+                showSubfolderPrompt = false
+                pendingSong = null
+            }
+
             menuOpen -> menuOpen = false
 
             drawerOpen -> drawerOpen = false
+
+            section == "Folder" && selectedFolder != null -> {
+                val parent = parentPath(selectedFolder!!)
+                if (parent.isNotBlank()) {
+                    selectedFolder = parent
+                } else {
+                    selectedFolder = null
+                    section = "Folders"
+                }
+                searchText = ""
+            }
 
             section != "Home" -> {
                 section = "Home"
@@ -78,40 +227,42 @@ fun HomeScreen(
         }
     }
 
-    val folders = remember(songs) {
-        songs.map { it.folderPath }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .sorted()
+    val rootFolders = remember(songs) {
+        songs.mapNotNull { song ->
+            normalizedPath(song.folderPath)
+                .takeIf { it.isNotBlank() }
+                ?.substringBefore('/')
+        }.distinct().sortedBy { it.lowercase() }
     }
 
     val artists = remember(songs) {
-        songs.map { it.artist }
-            .filter { it.isNotBlank() && it != "<unknown>" }
+        songs.map { it.artist.trim() }
+            .filter { it.isNotBlank() }
             .distinct()
-            .sorted()
+            .sortedBy { it.lowercase() }
     }
 
-    val matchingSongs = remember(
+    val visibleSongs = remember(
         songs, searchText, section, selectedFolder
     ) {
         val base = when (section) {
-            "Folder" -> songs.filter {
-                it.folderPath == selectedFolder
-            }
+            "Folder" -> selectedFolder?.let {
+                directSongs(it)
+            } ?: emptyList()
 
             "Artists" -> songs
-
-            "Folders" -> emptyList()
 
             else -> songs
         }
 
-        if (searchText.isBlank()) base
-        else base.filter {
-            it.title.contains(searchText, ignoreCase = true) ||
-                it.artist.contains(searchText, ignoreCase = true) ||
-                it.folderPath.contains(searchText, ignoreCase = true)
+        if (searchText.isBlank()) {
+            base
+        } else {
+            base.filter {
+                it.title.contains(searchText, ignoreCase = true) ||
+                    it.artist.contains(searchText, ignoreCase = true) ||
+                    it.folderPath.contains(searchText, ignoreCase = true)
+            }
         }
     }
 
@@ -137,7 +288,6 @@ fun HomeScreen(
             .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // HOME HEADER
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -278,7 +428,6 @@ fun HomeScreen(
             }
         }
 
-        // SEARCH
         if (searchOpen) {
             Spacer(Modifier.height(10.dp))
 
@@ -303,7 +452,6 @@ fun HomeScreen(
             )
         }
 
-        // HOME OR SELECTED SECTION
         if (section == "Home") {
             Box(
                 modifier = Modifier
@@ -326,7 +474,11 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    section.uppercase(),
+                    if (section == "Folder" && selectedFolder != null) {
+                        folderName(selectedFolder!!)
+                    } else {
+                        section.uppercase()
+                    },
                     color = lightCopper,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
@@ -334,16 +486,41 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f)
                 )
 
+                if (section == "Folder" && selectedFolder != null) {
+                    TextButton(
+                        onClick = {
+                            requestFolderPlayback()
+                        }
+                    ) {
+                        Text(
+                            "PLAY FOLDER",
+                            color = copper,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
                 TextButton(
                     onClick = {
-                        section = "Home"
-                        selectedFolder = null
-                        searchText = ""
-                        searchOpen = false
+                        if (section == "Folder" && selectedFolder != null) {
+                            val parent = parentPath(selectedFolder!!)
+                            if (parent.isNotBlank()) {
+                                selectedFolder = parent
+                            } else {
+                                selectedFolder = null
+                                section = "Folders"
+                            }
+                        } else {
+                            section = "Home"
+                            selectedFolder = null
+                            searchText = ""
+                            searchOpen = false
+                        }
                     }
                 ) {
                     Text(
-                        "CLOSE  ×",
+                        if (section == "Folder") "BACK" else "CLOSE ×",
                         color = copper,
                         fontSize = 11.sp
                     )
@@ -374,13 +551,14 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(bottom = 12.dp)
                     ) {
-                        items(folders) { folder ->
+                        items(rootFolders, key = { it }) { folder ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
                                         selectedFolder = folder
                                         section = "Folder"
+                                        searchText = ""
                                     }
                                     .padding(vertical = 15.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -394,7 +572,7 @@ fun HomeScreen(
                                 Spacer(Modifier.width(14.dp))
 
                                 Text(
-                                    folder.substringAfterLast('/'),
+                                    folder,
                                     color = Color.White,
                                     fontSize = 14.sp,
                                     modifier = Modifier.weight(1f)
@@ -412,6 +590,121 @@ fun HomeScreen(
                     }
                 }
 
+                "Folder" -> {
+                    val folder = selectedFolder ?: ""
+
+                    val children = remember(songs, folder) {
+                        childFolders(folder)
+                    }
+
+                    val folderSongs = remember(songs, folder) {
+                        directSongs(folder)
+                    }
+
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(bottom = 12.dp)
+                    ) {
+                        items(children, key = { it }) { child ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedFolder = child
+                                        searchText = ""
+                                    }
+                                    .padding(vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "▣",
+                                    color = copper,
+                                    fontSize = 21.sp
+                                )
+
+                                Spacer(Modifier.width(14.dp))
+
+                                Text(
+                                    folderName(child),
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                Text(
+                                    "›",
+                                    color = lightCopper,
+                                    fontSize = 22.sp
+                                )
+                            }
+
+                            HorizontalDivider(color = line)
+                        }
+
+                        items(
+                            folderSongs,
+                            key = { it.uri.toString() }
+                        ) { song ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        requestFolderPlayback(song)
+                                    }
+                                    .padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFF302016)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "♫",
+                                        color = lightCopper,
+                                        fontSize = 21.sp
+                                    )
+                                }
+
+                                Spacer(Modifier.width(12.dp))
+
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        song.title,
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+
+                                    if (song.artist.isNotBlank()) {
+                                        Text(
+                                            song.artist,
+                                            color = muted,
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    "▶",
+                                    color = copper,
+                                    fontSize = 13.sp
+                                )
+                            }
+
+                            HorizontalDivider(color = line)
+                        }
+                    }
+                }
+
                 "Artists" -> {
                     LazyColumn(
                         modifier = Modifier.weight(1f),
@@ -419,10 +712,7 @@ fun HomeScreen(
                     ) {
                         items(
                             artists.filter {
-                                it.contains(
-                                    searchText,
-                                    ignoreCase = true
-                                )
+                                it.contains(searchText, ignoreCase = true)
                             }
                         ) { artist ->
                             Column(
@@ -458,14 +748,22 @@ fun HomeScreen(
                         contentPadding = PaddingValues(bottom = 12.dp)
                     ) {
                         items(
-                            matchingSongs,
+                            visibleSongs,
                             key = { it.uri.toString() }
                         ) { song ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        onPlaySong(song)
+                                        val ordered = songs.sortedBy {
+                                            it.title.lowercase()
+                                        }
+                                        val index = ordered.indexOfFirst {
+                                            it.uri == song.uri
+                                        }
+                                        if (index >= 0) {
+                                            onPlaySongs(ordered, index)
+                                        }
                                     }
                                     .padding(vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -473,12 +771,8 @@ fun HomeScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(40.dp)
-                                        .clip(
-                                            RoundedCornerShape(10.dp)
-                                        )
-                                        .background(
-                                            Color(0xFF302016)
-                                        ),
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFF302016)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -502,13 +796,15 @@ fun HomeScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
 
-                                    Text(
-                                        song.artist,
-                                        color = muted,
-                                        fontSize = 10.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    if (song.artist.isNotBlank()) {
+                                        Text(
+                                            song.artist,
+                                            color = muted,
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
 
                                 Text(
@@ -525,7 +821,6 @@ fun HomeScreen(
             }
         }
 
-        // PERSISTENT MINI-PLAYER
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -647,5 +942,40 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    if (showSubfolderPrompt) {
+        AlertDialog(
+            onDismissRequest = {
+                showSubfolderPrompt = false
+                pendingSong = null
+            },
+            containerColor = panel,
+            title = {
+                Text(
+                    "Add subfolders too?",
+                    color = lightCopper,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        playFolderChoice(true)
+                    }
+                ) {
+                    Text("YES", color = lightCopper)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        playFolderChoice(false)
+                    }
+                ) {
+                    Text("NO", color = muted)
+                }
+            }
+        )
     }
 }
