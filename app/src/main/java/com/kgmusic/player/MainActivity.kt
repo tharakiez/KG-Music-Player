@@ -308,10 +308,11 @@ class MainActivity : ComponentActivity() {
         val controller = mediaController ?: return
         if (songs.isEmpty()) return
 
+        val safeIndex = startIndex.coerceIn(0, songs.lastIndex)
         val items = songs.map { createMediaItem(it) }
 
         controller.apply {
-            setMediaItems(items, startIndex, 0L)
+            setMediaItems(items, safeIndex, 0L)
             shuffleModeEnabled = shuffle
 
             this.repeatMode = when (repeatMode) {
@@ -434,30 +435,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        val folderNames = remember(songs, currentFolder) {
-            val prefix = currentFolder?.let { "$it/" } ?: ""
-
-            songs.mapNotNull { song ->
-                val path = song.folderPath
-
-                if (path == currentFolder || path.isEmpty()) {
-                    null
-                } else if (path.startsWith(prefix)) {
-                    path.removePrefix(prefix)
-                        .substringBefore("/")
-                        .takeIf { it.isNotEmpty() }
-                } else {
-                    null
-                }
-            }.distinct().sorted()
-        }
-
-        val visibleSongs = remember(songs, currentFolder) {
-            songs.filter {
-                it.folderPath == (currentFolder ?: "")
-            }
-        }
-
         MaterialTheme(
             colorScheme = darkColorScheme(
                 background = black,
@@ -542,726 +519,131 @@ class MainActivity : ComponentActivity() {
 
             } else {
 
-                // MAIN AFRICAN COPPER HOME SCREEN
+                // NEW AFRICAN COPPER HOME SCREEN
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(black)
-                        .padding(
-                            horizontal = 14.dp,
-                            vertical = 12.dp
-                        )
-                ) {
+                if (!hasPermission) {
 
-                    Box(
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(205.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .border(
-                                1.dp,
-                                copper.copy(alpha = 0.8f),
-                                RoundedCornerShape(24.dp)
-                            )
+                            .fillMaxSize()
+                            .background(black)
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-
-                        Image(
-                            painter = painterResource(
-                                id = R.drawable.kg_portrait
-                            ),
-                            contentDescription = "KG portrait",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
+                        Text(
+                            "♫",
+                            color = copper,
+                            fontSize = 36.sp
                         )
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color(0x33090706),
-                                            Color.Transparent,
-                                            Color(0xF5090706)
-                                        )
-                                    )
-                                )
-                        )
-
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(16.dp)
-                        ) {
-                            Text(
-                                "BANJUKA ARTS  •  PRESENTS",
-                                color = lightCopper,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 2.sp
-                            )
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(18.dp)
-                        ) {
-                            Text(
-                                "KG",
-                                color = lightCopper,
-                                fontSize = 43.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 3.sp
-                            )
-
-                            Text(
-                                "AFRICAN SOUL",
-                                color = Color.White,
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 3.sp
-                            )
-
-                            Spacer(Modifier.height(4.dp))
-
-                            Text(
-                                "YOUR SOUND. YOUR ROOTS. YOUR STORY.",
-                                color = lightCopper,
-                                fontSize = 9.sp,
-                                letterSpacing = 1.5.sp
-                            )
-                        }
+                        Spacer(Modifier.height(12.dp))
 
                         Text(
-                            "◇  ◆  ◇",
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(16.dp),
+                            "LET THE MUSIC IN",
                             color = lightCopper,
-                            fontSize = 16.sp
-                        )
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-
-                    Text(
-                        "◆  ◇  ◆  ◇  ◆  ◇  ◆",
-                        modifier = Modifier.fillMaxWidth(),
-                        color = copper,
-                        fontSize = 12.sp,
-                        letterSpacing = 4.sp
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                "KG MUSIC PLAYER",
-                                color = lightCopper,
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.5.sp
-                            )
-
-                            Text(
-                                if (connected) {
-                                    "● SOUND ENGINE CONNECTED"
-                                } else {
-                                    "○ CONNECTING TO SOUND ENGINE..."
-                                },
-                                color = if (connected) copper else muted,
-                                fontSize = 9.sp,
-                                letterSpacing = 1.sp
-                            )
-                        }
-
-                        Text(
-                            "COPPER EDITION",
-                            color = muted,
-                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
+                            letterSpacing = 2.sp
                         )
-                    }
 
-                    Spacer(Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-
-                        OutlinedButton(
-                            onClick = { showEqualizer = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                copper
-                            ),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = lightCopper
-                            ),
-                            contentPadding = PaddingValues(horizontal = 2.dp)
-                        ) {
-                            Text(
-                                "♫ ENGINE",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        OutlinedButton(
-                            onClick = { showPlaylists = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                copper
-                            ),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = lightCopper
-                            ),
-                            contentPadding = PaddingValues(horizontal = 2.dp)
-                        ) {
-                            Text(
-                                "♫ PLAYLISTS",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Spacer(Modifier.height(12.dp))
 
                         Button(
                             onClick = {
+                                permissionLauncher.launch(permission)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = bronze
+                            )
+                        ) {
+                            Text("ALLOW MUSIC ACCESS")
+                        }
+                    }
+
+                } else {
+
+                    HomeScreen(
+                        songs = songs,
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        connected = connected,
+                        shuffle = shuffle,
+                        repeatMode = repeatMode,
+
+                        onPlayAll = {
+                            playSongs(
+                                songs,
+                                0,
+                                shuffle,
+                                repeatMode
+                            )
+                        },
+
+                        onShuffle = {
+                            shuffle = !shuffle
+                            mediaController?.shuffleModeEnabled = shuffle
+                        },
+
+                        onOpenEqualizer = {
+                            showEqualizer = true
+                        },
+
+                        onOpenPlaylists = {
+                            showPlaylists = true
+                        },
+
+                        onExit = {
+                            finish()
+                        },
+
+                        onPlaySong = { song ->
+                            val index = songs.indexOf(song)
+
+                            if (index >= 0) {
                                 playSongs(
                                     songs,
-                                    0,
+                                    index,
                                     shuffle,
                                     repeatMode
                                 )
-                            },
-                            enabled = connected && songs.isNotEmpty(),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = bronze
-                            ),
-                            contentPadding = PaddingValues(horizontal = 2.dp)
-                        ) {
-                            Text(
-                                "▶ PLAY ALL",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(15.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                "MY MUSIC",
-                                color = Color.White,
-                                fontSize = 19.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.5.sp
-                            )
-
-                            Text(
-                                "YOUR COLLECTION",
-                                color = muted,
-                                fontSize = 9.sp,
-                                letterSpacing = 2.sp
-                            )
-                        }
-
-                        Column(
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            Text(
-                                "${songs.size}",
-                                color = lightCopper,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            Text(
-                                "TRACKS",
-                                color = muted,
-                                fontSize = 9.sp,
-                                letterSpacing = 1.sp
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 9.dp),
-                        color = line
-                    )
-
-                    if (currentFolder != null) {
-                        TextButton(
-                            onClick = {
-                                val folder = currentFolder ?: ""
-                                val parent = folder.substringBeforeLast(
-                                    "/",
-                                    missingDelimiterValue = ""
-                                )
-                                currentFolder = parent.ifEmpty { null }
-                            },
-                            contentPadding = PaddingValues(
-                                horizontal = 8.dp,
-                                vertical = 2.dp
-                            )
-                        ) {
-                            Text(
-                                "← BACK TO PARENT",
-                                color = lightCopper,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Text(
-                            currentFolder ?: "",
-                            color = muted,
-                            fontSize = 10.sp,
-                            modifier = Modifier.padding(
-                                start = 8.dp,
-                                bottom = 6.dp
-                            )
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
-
-                        if (!hasPermission) {
-
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .align(Alignment.Center),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    "♫",
-                                    color = copper,
-                                    fontSize = 36.sp
-                                )
-
-                                Spacer(Modifier.height(8.dp))
-
-                                Text(
-                                    "LET THE MUSIC IN",
-                                    color = lightCopper,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 2.sp
-                                )
-
-                                Spacer(Modifier.height(10.dp))
-
-                                Button(
-                                    onClick = {
-                                        permissionLauncher.launch(permission)
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = bronze
-                                    )
-                                ) {
-                                    Text("ALLOW MUSIC ACCESS")
-                                }
                             }
+                        },
 
-                        } else if (songs.isEmpty()) {
-
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .align(Alignment.Center),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    "♫",
-                                    color = copper,
-                                    fontSize = 36.sp
-                                )
-
-                                Text(
-                                    "NO MUSIC FOUND",
-                                    color = lightCopper,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 2.sp
-                                )
-
-                                Text(
-                                    "Add music to your phone to begin.",
-                                    color = muted,
-                                    fontSize = 11.sp
-                                )
-                            }
-
-                        } else {
-
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(bottom = 8.dp)
-                            ) {
-
-                                items(
-                                    folderNames,
-                                    key = { "folder-$it" }
-                                ) { folder ->
-
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(panel)
-                                            .clickable {
-                                                currentFolder =
-                                                    if (currentFolder == null) {
-                                                        folder
-                                                    } else {
-                                                        "${currentFolder}/$folder"
-                                                    }
-                                            }
-                                            .padding(
-                                                horizontal = 13.dp,
-                                                vertical = 13.dp
-                                            ),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-
-                                        Icon(
-                                            Icons.Default.Folder,
-                                            contentDescription = "Folder",
-                                            tint = copper,
-                                            modifier = Modifier.size(23.dp)
-                                        )
-
-                                        Spacer(Modifier.width(13.dp))
-
-                                        Text(
-                                            folder,
-                                            color = Color.White,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            modifier = Modifier.weight(1f)
-                                        )
-
-                                        Text(
-                                            "OPEN  ›",
-                                            color = lightCopper,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-
-                                    Spacer(Modifier.height(5.dp))
-                                }
-
-                                items(
-                                    visibleSongs,
-                                    key = { it.uri.toString() }
-                                ) { song ->
-
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .combinedClickable(
-                                                onClick = {
-                                                    val index =
-                                                        visibleSongs.indexOf(song)
-
-                                                    playSongs(
-                                                        visibleSongs,
-                                                        index,
-                                                        shuffle,
-                                                        repeatMode
-                                                    )
-                                                },
-                                                onLongClick = {
-                                                    addToQueue(song)
-                                                }
-                                            )
-                                            .padding(
-                                                horizontal = 12.dp,
-                                                vertical = 11.dp
-                                            ),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-
-                                        Box(
-                                            modifier = Modifier
-                                                .size(38.dp)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .background(Color(0xFF302016)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                Icons.Default.MusicNote,
-                                                contentDescription = "Song",
-                                                tint = lightCopper,
-                                                modifier = Modifier.size(21.dp)
-                                            )
-                                        }
-
-                                        Spacer(Modifier.width(12.dp))
-
-                                        Column(
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Text(
-                                                song.title,
-                                                color = Color.White,
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-
-                                            Spacer(Modifier.height(3.dp))
-
-                                            Text(
-                                                song.artist,
-                                                color = muted,
-                                                fontSize = 10.sp,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-
-                                        Text(
-                                            "•••",
-                                            color = copper,
-                                            fontSize = 15.sp
-                                        )
-                                    }
-
-                                    HorizontalDivider(
-                                        color = line.copy(alpha = 0.55f)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                1.dp,
-                                copper.copy(alpha = 0.65f),
-                                RoundedCornerShape(18.dp)
-                            )
-                            .clickable {
-                                updateQueue(mediaController ?: return@clickable)
+                        onOpenQueue = {
+                            mediaController?.let { controller ->
+                                updateQueue(controller)
                                 showQueue = true
-                            },
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = panel
-                        )
-                    ) {
-
-                        Column(
-                            modifier = Modifier.padding(
-                                horizontal = 13.dp,
-                                vertical = 11.dp
-                            )
-                        ) {
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    "NOW PLAYING",
-                                    color = lightCopper,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 2.sp,
-                                    modifier = Modifier.weight(1f)
-                                )
-
-                                Text(
-                                    "VIEW QUEUE  ›",
-                                    color = copper,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-
-                                Spacer(Modifier.width(8.dp))
-
-                                Text(
-                                    if (isPlaying) "● PLAYING" else "● READY",
-                                    color = if (isPlaying) copper else muted,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
                             }
+                        },
 
-                            Spacer(Modifier.height(5.dp))
+                        onPrevious = {
+                            mediaController?.seekToPrevious()
+                        },
 
-                            Text(
-                                currentSong,
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            Spacer(Modifier.height(7.dp))
-
-                            HorizontalDivider(color = line)
-
-                            Spacer(Modifier.height(5.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-
-                                IconButton(
-                                    onClick = {
-                                        shuffle = !shuffle
-                                        mediaController?.shuffleModeEnabled =
-                                            shuffle
-                                    },
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Shuffle,
-                                        contentDescription = if (shuffle) {
-                                            "Shuffle on"
-                                        } else {
-                                            "Shuffle off"
-                                        },
-                                        tint = if (shuffle) lightCopper else muted,
-                                        modifier = Modifier.size(23.dp)
-                                    )
+                        onTogglePlayback = {
+                            mediaController?.let { controller ->
+                                if (controller.isPlaying) {
+                                    controller.pause()
+                                } else {
+                                    controller.play()
                                 }
+                            }
+                        },
 
-                                IconButton(
-                                    onClick = {
-                                        mediaController?.seekToPrevious()
-                                    },
-                                    enabled = connected,
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    Text(
-                                        "⏮",
-                                        color = lightCopper,
-                                        fontSize = 21.sp
-                                    )
-                                }
+                        onNext = {
+                            mediaController?.seekToNext()
+                        },
 
-                                Button(
-                                    onClick = {
-                                        mediaController?.let { controller ->
-                                            if (controller.isPlaying) {
-                                                controller.pause()
-                                            } else {
-                                                controller.play()
-                                            }
-                                        }
-                                    },
-                                    enabled = connected,
-                                    modifier = Modifier.size(
-                                        width = 55.dp,
-                                        height = 42.dp
-                                    ),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = copper
-                                    ),
-                                    contentPadding = PaddingValues(0.dp)
-                                ) {
-                                    Text(
-                                        if (isPlaying) "Ⅱ" else "▶",
-                                        color = Color.White,
-                                        fontSize = 21.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+                        onRepeat = {
+                            repeatMode = (repeatMode + 1) % 3
 
-                                IconButton(
-                                    onClick = {
-                                        mediaController?.seekToNext()
-                                    },
-                                    enabled = connected,
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    Text(
-                                        "⏭",
-                                        color = lightCopper,
-                                        fontSize = 21.sp
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = {
-                                        repeatMode = (repeatMode + 1) % 3
-
-                                        mediaController?.repeatMode =
-                                            when (repeatMode) {
-                                                1 -> Player.REPEAT_MODE_ALL
-                                                2 -> Player.REPEAT_MODE_ONE
-                                                else -> Player.REPEAT_MODE_OFF
-                                            }
-                                    },
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (repeatMode == 2) {
-                                            Icons.Default.RepeatOne
-                                        } else {
-                                            Icons.Default.Repeat
-                                        },
-                                        contentDescription = when (repeatMode) {
-                                            1 -> "Repeat playlist"
-                                            2 -> "Repeat current song"
-                                            else -> "Repeat off"
-                                        },
-                                        tint = when (repeatMode) {
-                                            1 -> copper
-                                            2 -> lightCopper
-                                            else -> muted
-                                        },
-                                        modifier = Modifier.size(23.dp)
-                                    )
-                                }
+                            mediaController?.repeatMode = when (repeatMode) {
+                                1 -> Player.REPEAT_MODE_ALL
+                                2 -> Player.REPEAT_MODE_ONE
+                                else -> Player.REPEAT_MODE_OFF
                             }
                         }
-                    }
+                    )
                 }
             }
         }
