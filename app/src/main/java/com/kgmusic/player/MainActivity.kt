@@ -369,6 +369,7 @@ class MainActivity : ComponentActivity() {
         var hasPermission by remember { mutableStateOf(false) }
         var showEqualizer by remember { mutableStateOf(false) }
         var showQueue by remember { mutableStateOf(false) }
+        var showPlaylists by remember { mutableStateOf(false) }
         var shuffle by remember { mutableStateOf(false) }
 
         // 0 = repeat off, 1 = repeat playlist, 2 = repeat one song
@@ -418,11 +419,13 @@ class MainActivity : ComponentActivity() {
         BackHandler(
             enabled = showEqualizer ||
                 showQueue ||
+                showPlaylists ||
                 currentFolder != null
         ) {
             when {
                 showEqualizer -> showEqualizer = false
                 showQueue -> showQueue = false
+                showPlaylists -> showPlaylists = false
                 currentFolder != null -> {
                     val folder = currentFolder ?: ""
                     val parent = folder.substringBeforeLast(
@@ -472,6 +475,23 @@ class MainActivity : ComponentActivity() {
                 EqualizerScreen(
                     onBack = { showEqualizer = false },
                     audioEffects = audioEffects
+                )
+
+            } else if (showPlaylists) {
+
+                PlaylistScreen(
+                    songs = songs,
+                    onBack = { showPlaylists = false },
+                    onPlayPlaylist = { playlistSongs ->
+                        playSongs(
+                            playlistSongs,
+                            0,
+                            shuffle,
+                            repeatMode
+                        )
+                        showPlaylists = false
+                        showQueue = true
+                    }
                 )
 
             } else if (showQueue) {
@@ -527,8 +547,6 @@ class MainActivity : ComponentActivity() {
                     }
 
                     Spacer(Modifier.height(18.dp))
-
-                    // CURRENT SONG
 
                     Card(
                         modifier = Modifier
@@ -620,11 +638,7 @@ class MainActivity : ComponentActivity() {
                                     Icon(
                                         Icons.Default.Shuffle,
                                         contentDescription = "Shuffle",
-                                        tint = if (shuffle) {
-                                            lightCopper
-                                        } else {
-                                            muted
-                                        }
+                                        tint = if (shuffle) lightCopper else muted
                                     )
                                 }
 
@@ -700,11 +714,7 @@ class MainActivity : ComponentActivity() {
                                             Icons.Default.Repeat
                                         },
                                         contentDescription = "Change repeat mode",
-                                        tint = if (repeatMode == 0) {
-                                            muted
-                                        } else {
-                                            lightCopper
-                                        }
+                                        tint = if (repeatMode == 0) muted else lightCopper
                                     )
                                 }
                             }
@@ -712,8 +722,6 @@ class MainActivity : ComponentActivity() {
                     }
 
                     Spacer(Modifier.height(22.dp))
-
-                    // UPCOMING QUEUE
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -815,15 +823,9 @@ class MainActivity : ComponentActivity() {
                                         ),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-
                                     Text(
-                                        if (isCurrent) "♫" else
-                                            "${index + 1}",
-                                        color = if (isCurrent) {
-                                            lightCopper
-                                        } else {
-                                            muted
-                                        },
+                                        if (isCurrent) "♫" else "${index + 1}",
+                                        color = if (isCurrent) lightCopper else muted,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.width(28.dp)
@@ -832,11 +834,7 @@ class MainActivity : ComponentActivity() {
                                     Icon(
                                         Icons.Default.MusicNote,
                                         contentDescription = null,
-                                        tint = if (isCurrent) {
-                                            lightCopper
-                                        } else {
-                                            copper
-                                        },
+                                        tint = if (isCurrent) lightCopper else copper,
                                         modifier = Modifier.size(21.dp)
                                     )
 
@@ -847,11 +845,7 @@ class MainActivity : ComponentActivity() {
                                     ) {
                                         Text(
                                             track.title,
-                                            color = if (isCurrent) {
-                                                lightCopper
-                                            } else {
-                                                Color.White
-                                            },
+                                            color = if (isCurrent) lightCopper else Color.White,
                                             fontSize = 13.sp,
                                             fontWeight = if (isCurrent) {
                                                 FontWeight.Bold
@@ -904,8 +898,6 @@ class MainActivity : ComponentActivity() {
                             vertical = 12.dp
                         )
                 ) {
-
-                    // AFRICAN COPPER HERO
 
                     Box(
                         modifier = Modifier
@@ -1009,8 +1001,6 @@ class MainActivity : ComponentActivity() {
 
                     Spacer(Modifier.height(8.dp))
 
-                    // BRAND AND SERVICE STATUS
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -1049,18 +1039,18 @@ class MainActivity : ComponentActivity() {
 
                     Spacer(Modifier.height(12.dp))
 
-                    // MAIN ACTIONS
+                    // THREE MAIN ACTIONS
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
 
                         OutlinedButton(
                             onClick = { showEqualizer = true },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp),
+                                .height(46.dp),
                             shape = RoundedCornerShape(12.dp),
                             border = androidx.compose.foundation.BorderStroke(
                                 1.dp,
@@ -1069,11 +1059,33 @@ class MainActivity : ComponentActivity() {
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = lightCopper
                             ),
-                            contentPadding = PaddingValues(horizontal = 8.dp)
+                            contentPadding = PaddingValues(horizontal = 2.dp)
                         ) {
                             Text(
-                                "♫  SOUND ENGINE",
-                                fontSize = 10.sp,
+                                "♫ ENGINE",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { showPlaylists = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                copper
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = lightCopper
+                            ),
+                            contentPadding = PaddingValues(horizontal = 2.dp)
+                        ) {
+                            Text(
+                                "♫ PLAYLISTS",
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -1090,24 +1102,22 @@ class MainActivity : ComponentActivity() {
                             enabled = connected && songs.isNotEmpty(),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp),
+                                .height(46.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = bronze
                             ),
-                            contentPadding = PaddingValues(horizontal = 8.dp)
+                            contentPadding = PaddingValues(horizontal = 2.dp)
                         ) {
                             Text(
-                                "▶  PLAY ALL",
-                                fontSize = 11.sp,
+                                "▶ PLAY ALL",
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
 
                     Spacer(Modifier.height(15.dp))
-
-                    // MUSIC LIBRARY HEADING
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1156,8 +1166,6 @@ class MainActivity : ComponentActivity() {
                         color = line
                     )
 
-                    // FOLDER NAVIGATION
-
                     if (currentFolder != null) {
                         TextButton(
                             onClick = {
@@ -1191,8 +1199,6 @@ class MainActivity : ComponentActivity() {
                             )
                         )
                     }
-
-                    // MUSIC CONTENT
 
                     Box(
                         modifier = Modifier
@@ -1269,9 +1275,7 @@ class MainActivity : ComponentActivity() {
 
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(
-                                    bottom = 8.dp
-                                )
+                                contentPadding = PaddingValues(bottom = 8.dp)
                             ) {
 
                                 items(
@@ -1363,9 +1367,7 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier
                                                 .size(38.dp)
                                                 .clip(RoundedCornerShape(10.dp))
-                                                .background(
-                                                    Color(0xFF302016)
-                                                ),
+                                                .background(Color(0xFF302016)),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
@@ -1417,8 +1419,6 @@ class MainActivity : ComponentActivity() {
                     }
 
                     Spacer(Modifier.height(8.dp))
-
-                    // CLICKABLE NOW PLAYING PANEL
 
                     Card(
                         modifier = Modifier
@@ -1513,11 +1513,7 @@ class MainActivity : ComponentActivity() {
                                         } else {
                                             "Shuffle off"
                                         },
-                                        tint = if (shuffle) {
-                                            lightCopper
-                                        } else {
-                                            muted
-                                        },
+                                        tint = if (shuffle) lightCopper else muted,
                                         modifier = Modifier.size(23.dp)
                                     )
                                 }
