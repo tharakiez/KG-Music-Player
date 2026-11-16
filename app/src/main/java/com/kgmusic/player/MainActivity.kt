@@ -105,7 +105,7 @@ class MainActivity : ComponentActivity() {
                 title = item.mediaMetadata.title?.toString()
                     ?: "Unknown song",
                 artist = item.mediaMetadata.artist?.toString()
-                    ?: "Unknown artist",
+                    ?: "",
                 uri = item.localConfiguration?.uri
                     ?: android.net.Uri.EMPTY
             )
@@ -229,11 +229,22 @@ class MainActivity : ComponentActivity() {
                     )
                 ) ?: "Unknown"
 
-                val artist = cursor.getString(
+                val rawArtist = cursor.getString(
                     cursor.getColumnIndexOrThrow(
                         MediaStore.Audio.Media.ARTIST
                     )
-                ) ?: "Unknown Artist"
+                )?.trim().orEmpty()
+
+                val artist = if (
+                    rawArtist.isBlank() ||
+                    rawArtist.equals("<unknown>", ignoreCase = true) ||
+                    rawArtist.equals("unknown", ignoreCase = true) ||
+                    rawArtist.equals("unknown artist", ignoreCase = true)
+                ) {
+                    ""
+                } else {
+                    rawArtist
+                }
 
                 val folderPath = if (Build.VERSION.SDK_INT >= 29) {
                     cursor.getString(
@@ -578,17 +589,13 @@ class MainActivity : ComponentActivity() {
                             finishAndRemoveTask()
                         },
 
-                        onPlaySong = { song ->
-                            val index = songs.indexOf(song)
-
-                            if (index >= 0) {
-                                playSongs(
-                                    songs,
-                                    index,
-                                    shuffle,
-                                    repeatMode
-                                )
-                            }
+                        onPlaySongs = { selectedSongs, startIndex ->
+                            playSongs(
+                                selectedSongs,
+                                startIndex,
+                                shuffle,
+                                repeatMode
+                            )
                         },
 
                         onOpenQueue = {
