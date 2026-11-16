@@ -27,6 +27,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,6 +44,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -68,10 +73,33 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         connectPlaybackService()
 
         setContent {
             KGMusicApp()
+        }
+
+        hideNavigationBar()
+    }
+
+    private fun hideNavigationBar() {
+        WindowInsetsControllerCompat(
+            window,
+            window.decorView
+        ).apply {
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+            hide(WindowInsetsCompat.Type.navigationBars())
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+
+        if (hasFocus) {
+            hideNavigationBar()
         }
     }
 
@@ -224,7 +252,7 @@ class MainActivity : ComponentActivity() {
         songs: List<Song>,
         startIndex: Int,
         shuffle: Boolean,
-        repeatAll: Boolean
+        repeatMode: Int
     ) {
         val controller = mediaController ?: return
         if (songs.isEmpty()) return
@@ -234,11 +262,13 @@ class MainActivity : ComponentActivity() {
         controller.apply {
             setMediaItems(items, startIndex, 0L)
             shuffleModeEnabled = shuffle
-            repeatMode = if (repeatAll) {
-                Player.REPEAT_MODE_ALL
-            } else {
-                Player.REPEAT_MODE_OFF
+
+            this.repeatMode = when (repeatMode) {
+                1 -> Player.REPEAT_MODE_ALL
+                2 -> Player.REPEAT_MODE_ONE
+                else -> Player.REPEAT_MODE_OFF
             }
+
             prepare()
             play()
         }
@@ -281,7 +311,10 @@ class MainActivity : ComponentActivity() {
         var hasPermission by remember { mutableStateOf(false) }
         var showEqualizer by remember { mutableStateOf(false) }
         var shuffle by remember { mutableStateOf(false) }
-        var repeatAll by remember { mutableStateOf(false) }
+
+        // 0 = repeat off, 1 = repeat playlist, 2 = repeat one song
+        var repeatMode by remember { mutableStateOf(0) }
+
         var currentFolder by remember { mutableStateOf<String?>(null) }
 
         val connected by controllerReady
@@ -482,8 +515,6 @@ class MainActivity : ComponentActivity() {
 
                     Spacer(Modifier.height(10.dp))
 
-                    // AFRICAN GEOMETRIC ACCENT
-
                     Text(
                         "◆  ◇  ◆  ◇  ◆  ◇  ◆",
                         modifier = Modifier.fillMaxWidth(),
@@ -569,7 +600,7 @@ class MainActivity : ComponentActivity() {
                                     songs,
                                     0,
                                     shuffle,
-                                    repeatAll
+                                    repeatMode
                                 )
                             },
                             enabled = connected && songs.isNotEmpty(),
@@ -830,7 +861,7 @@ class MainActivity : ComponentActivity() {
                                                         visibleSongs,
                                                         index,
                                                         shuffle,
-                                                        repeatAll
+                                                        repeatMode
                                                     )
                                                 },
                                                 onLongClick = {
@@ -970,28 +1001,38 @@ class MainActivity : ComponentActivity() {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
 
-                                TextButton(
+                                // SHUFFLE ICON
+
+                                IconButton(
                                     onClick = {
                                         shuffle = !shuffle
                                         mediaController?.shuffleModeEnabled =
                                             shuffle
                                     },
-                                    contentPadding = PaddingValues(4.dp)
+                                    modifier = Modifier.size(38.dp)
                                 ) {
-                                    Text(
-                                        if (shuffle) "SHUFFLE ON" else "SHUFFLE",
-                                        color = if (shuffle) lightCopper else muted,
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold
+                                    Icon(
+                                        imageVector = Icons.Default.Shuffle,
+                                        contentDescription = if (shuffle) {
+                                            "Shuffle on"
+                                        } else {
+                                            "Shuffle off"
+                                        },
+                                        tint = if (shuffle) {
+                                            lightCopper
+                                        } else {
+                                            muted
+                                        },
+                                        modifier = Modifier.size(23.dp)
                                     )
                                 }
 
-                                TextButton(
+                                IconButton(
                                     onClick = {
                                         mediaController?.seekToPrevious()
                                     },
                                     enabled = connected,
-                                    contentPadding = PaddingValues(4.dp)
+                                    modifier = Modifier.size(38.dp)
                                 ) {
                                     Text(
                                         "⏮",
@@ -1029,12 +1070,12 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
 
-                                TextButton(
+                                IconButton(
                                     onClick = {
                                         mediaController?.seekToNext()
                                     },
                                     enabled = connected,
-                                    contentPadding = PaddingValues(4.dp)
+                                    modifier = Modifier.size(38.dp)
                                 ) {
                                     Text(
                                         "⏭",
@@ -1043,23 +1084,41 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
 
-                                TextButton(
+                                // REPEAT CYCLE:
+                                // 0 = OFF
+                                // 1 = REPEAT PLAYLIST
+                                // 2 = REPEAT CURRENT SONG
+
+                                IconButton(
                                     onClick = {
-                                        repeatAll = !repeatAll
+                                        repeatMode = (repeatMode + 1) % 3
+
                                         mediaController?.repeatMode =
-                                            if (repeatAll) {
-                                                Player.REPEAT_MODE_ALL
-                                            } else {
-                                                Player.REPEAT_MODE_OFF
+                                            when (repeatMode) {
+                                                1 -> Player.REPEAT_MODE_ALL
+                                                2 -> Player.REPEAT_MODE_ONE
+                                                else -> Player.REPEAT_MODE_OFF
                                             }
                                     },
-                                    contentPadding = PaddingValues(4.dp)
+                                    modifier = Modifier.size(38.dp)
                                 ) {
-                                    Text(
-                                        if (repeatAll) "REPEAT ON" else "REPEAT",
-                                        color = if (repeatAll) lightCopper else muted,
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold
+                                    Icon(
+                                        imageVector = if (repeatMode == 2) {
+                                            Icons.Default.RepeatOne
+                                        } else {
+                                            Icons.Default.Repeat
+                                        },
+                                        contentDescription = when (repeatMode) {
+                                            1 -> "Repeat playlist"
+                                            2 -> "Repeat current song"
+                                            else -> "Repeat off"
+                                        },
+                                        tint = when (repeatMode) {
+                                            1 -> copper
+                                            2 -> lightCopper
+                                            else -> muted
+                                        },
+                                        modifier = Modifier.size(23.dp)
                                     )
                                 }
                             }
