@@ -23,13 +23,16 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,6 +63,12 @@ data class Song(
     val folderPath: String
 )
 
+data class QueueTrack(
+    val title: String,
+    val artist: String,
+    val uri: android.net.Uri
+)
+
 class MainActivity : ComponentActivity() {
 
     private var mediaController: MediaController? = null
@@ -68,6 +77,12 @@ class MainActivity : ComponentActivity() {
     private val controllerReady = mutableStateOf(false)
     private val currentSongState = mutableStateOf("Nothing playing")
     private val playingState = mutableStateOf(false)
+
+    private val queueState =
+        mutableStateOf<List<QueueTrack>>(emptyList())
+
+    private val currentQueueIndexState =
+        mutableStateOf(-1)
 
     private var controllerListener: Player.Listener? = null
 
@@ -103,6 +118,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun updateQueue(controller: MediaController) {
+        val updatedQueue = (0 until controller.mediaItemCount).map { index ->
+            val item = controller.getMediaItemAt(index)
+
+            QueueTrack(
+                title = item.mediaMetadata.title?.toString()
+                    ?: "Unknown song",
+                artist = item.mediaMetadata.artist?.toString()
+                    ?: "Unknown artist",
+                uri = item.localConfiguration?.uri
+                    ?: android.net.Uri.EMPTY
+            )
+        }
+
+        queueState.value = updatedQueue
+        currentQueueIndexState.value =
+            controller.currentMediaItemIndex
+    }
+
     private fun connectPlaybackService() {
         val token = SessionToken(
             this,
@@ -130,10 +164,28 @@ class MainActivity : ComponentActivity() {
                         currentSongState.value =
                             mediaItem?.mediaMetadata?.title?.toString()
                                 ?: "Nothing playing"
+
+                        updateQueue(controller)
                     }
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         playingState.value = isPlaying
+                    }
+
+                    override fun onEvents(
+                        player: Player,
+                        events: Player.Events
+                    ) {
+                        updateQueue(controller)
+
+                        currentSongState.value =
+                            controller.currentMediaItem
+                                ?.mediaMetadata
+                                ?.title
+                                ?.toString()
+                                ?: "Nothing playing"
+
+                        playingState.value = controller.isPlaying
                     }
                 }
 
@@ -145,6 +197,8 @@ class MainActivity : ComponentActivity() {
                         ?.toString() ?: "Nothing playing"
 
                 playingState.value = controller.isPlaying
+
+                updateQueue(controller)
 
             } catch (e: Exception) {
                 controllerReady.value = false
@@ -272,6 +326,8 @@ class MainActivity : ComponentActivity() {
             prepare()
             play()
         }
+
+        updateQueue(controller)
     }
 
     private fun addToQueue(song: Song) {
@@ -296,6 +352,8 @@ class MainActivity : ComponentActivity() {
             controller.addMediaItem(item)
         }
 
+        updateQueue(controller)
+
         Toast.makeText(
             this,
             "Added to current playlist: ${song.title}",
@@ -310,6 +368,7 @@ class MainActivity : ComponentActivity() {
         var songs by remember { mutableStateOf(emptyList<Song>()) }
         var hasPermission by remember { mutableStateOf(false) }
         var showEqualizer by remember { mutableStateOf(false) }
+        var showQueue by remember { mutableStateOf(false) }
         var shuffle by remember { mutableStateOf(false) }
 
         // 0 = repeat off, 1 = repeat playlist, 2 = repeat one song
@@ -320,6 +379,8 @@ class MainActivity : ComponentActivity() {
         val connected by controllerReady
         val currentSong by currentSongState
         val isPlaying by playingState
+        val queue by queueState
+        val currentQueueIndex by currentQueueIndexState
 
         val black = Color(0xFF090706)
         val copper = Color(0xFFB87333)
@@ -355,17 +416,21 @@ class MainActivity : ComponentActivity() {
         }
 
         BackHandler(
-            enabled = showEqualizer || currentFolder != null
+            enabled = showEqualizer ||
+                showQueue ||
+                currentFolder != null
         ) {
-            if (showEqualizer) {
-                showEqualizer = false
-            } else {
-                val folder = currentFolder ?: ""
-                val parent = folder.substringBeforeLast(
-                    "/",
-                    missingDelimiterValue = ""
-                )
-                currentFolder = parent.ifEmpty { null }
+            when {
+                showEqualizer -> showEqualizer = false
+                showQueue -> showQueue = false
+                currentFolder != null -> {
+                    val folder = currentFolder ?: ""
+                    val parent = folder.substringBeforeLast(
+                        "/",
+                        missingDelimiterValue = ""
+                    )
+                    currentFolder = parent.ifEmpty { null }
+                }
             }
         }
 
@@ -409,7 +474,426 @@ class MainActivity : ComponentActivity() {
                     audioEffects = audioEffects
                 )
 
+            } else if (showQueue) {
+
+                // FULL NOW PLAYING AND QUEUE SCREEN
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(black)
+                        .padding(horizontal = 18.dp, vertical = 14.dp)
+                ) {
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { showQueue = false }
+                        ) {
+                            Icon(
+                                Icons.Default.ArrowBack,
+                                contentDescription = "Back",
+                                tint = lightCopper
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                "NOW PLAYING",
+                                color = lightCopper,
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
+                            )
+
+                            Text(
+                                "YOUR PLAYING QUEUE",
+                                color = muted,
+                                fontSize = 9.sp,
+                                letterSpacing = 2.sp
+                            )
+                        }
+
+                        Text(
+                            "${queue.size} TRACKS",
+                            color = copper,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    // CURRENT SONG
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                1.dp,
+                                copper.copy(alpha = 0.8f),
+                                RoundedCornerShape(20.dp)
+                            ),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = panel
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(18.dp)
+                        ) {
+                            Text(
+                                "NOW PLAYING",
+                                color = lightCopper,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 2.sp
+                            )
+
+                            Spacer(Modifier.height(12.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(145.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(
+                                                Color(0xFF75421F),
+                                                Color(0xFF24150D),
+                                                Color(0xFF090706)
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.MusicNote,
+                                    contentDescription = null,
+                                    tint = lightCopper,
+                                    modifier = Modifier.size(76.dp)
+                                )
+                            }
+
+                            Spacer(Modifier.height(15.dp))
+
+                            Text(
+                                currentSong,
+                                color = Color.White,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            val currentArtist = queue.getOrNull(
+                                currentQueueIndex
+                            )?.artist ?: "Unknown artist"
+
+                            Spacer(Modifier.height(4.dp))
+
+                            Text(
+                                currentArtist,
+                                color = muted,
+                                fontSize = 12.sp
+                            )
+
+                            Spacer(Modifier.height(16.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        shuffle = !shuffle
+                                        mediaController?.shuffleModeEnabled =
+                                            shuffle
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Default.Shuffle,
+                                        contentDescription = "Shuffle",
+                                        tint = if (shuffle) {
+                                            lightCopper
+                                        } else {
+                                            muted
+                                        }
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        mediaController?.seekToPrevious()
+                                    },
+                                    enabled = connected
+                                ) {
+                                    Text(
+                                        "⏮",
+                                        color = lightCopper,
+                                        fontSize = 24.sp
+                                    )
+                                }
+
+                                Button(
+                                    onClick = {
+                                        mediaController?.let { controller ->
+                                            if (controller.isPlaying) {
+                                                controller.pause()
+                                            } else {
+                                                controller.play()
+                                            }
+                                        }
+                                    },
+                                    enabled = connected,
+                                    modifier = Modifier.size(
+                                        width = 62.dp,
+                                        height = 48.dp
+                                    ),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = copper
+                                    )
+                                ) {
+                                    Text(
+                                        if (isPlaying) "Ⅱ" else "▶",
+                                        color = Color.White,
+                                        fontSize = 23.sp
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        mediaController?.seekToNext()
+                                    },
+                                    enabled = connected
+                                ) {
+                                    Text(
+                                        "⏭",
+                                        color = lightCopper,
+                                        fontSize = 24.sp
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        repeatMode = (repeatMode + 1) % 3
+
+                                        mediaController?.repeatMode =
+                                            when (repeatMode) {
+                                                1 -> Player.REPEAT_MODE_ALL
+                                                2 -> Player.REPEAT_MODE_ONE
+                                                else -> Player.REPEAT_MODE_OFF
+                                            }
+                                    }
+                                ) {
+                                    Icon(
+                                        if (repeatMode == 2) {
+                                            Icons.Default.RepeatOne
+                                        } else {
+                                            Icons.Default.Repeat
+                                        },
+                                        contentDescription = "Change repeat mode",
+                                        tint = if (repeatMode == 0) {
+                                            muted
+                                        } else {
+                                            lightCopper
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(22.dp))
+
+                    // UPCOMING QUEUE
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "UP NEXT",
+                            color = Color.White,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.5.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Text(
+                            "PLAYLIST",
+                            color = muted,
+                            fontSize = 9.sp,
+                            letterSpacing = 2.sp
+                        )
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        color = line
+                    )
+
+                    if (queue.isEmpty()) {
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Default.QueueMusic,
+                                contentDescription = null,
+                                tint = copper,
+                                modifier = Modifier.size(50.dp)
+                            )
+
+                            Spacer(Modifier.height(10.dp))
+
+                            Text(
+                                "YOUR QUEUE IS EMPTY",
+                                color = lightCopper,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
+                            )
+
+                            Text(
+                                "Choose a song from your music library.",
+                                color = muted,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                    } else {
+
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentPadding = PaddingValues(bottom = 18.dp)
+                        ) {
+                            itemsIndexed(
+                                queue,
+                                key = { index, track ->
+                                    "$index-${track.uri}"
+                                }
+                            ) { index, track ->
+
+                                val isCurrent =
+                                    index == currentQueueIndex
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            if (isCurrent) {
+                                                Color(0xFF302016)
+                                            } else {
+                                                Color.Transparent
+                                            }
+                                        )
+                                        .clickable {
+                                            mediaController?.let { controller ->
+                                                controller.seekTo(index, 0L)
+                                                controller.play()
+                                                updateQueue(controller)
+                                            }
+                                        }
+                                        .padding(
+                                            horizontal = 12.dp,
+                                            vertical = 12.dp
+                                        ),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+
+                                    Text(
+                                        if (isCurrent) "♫" else
+                                            "${index + 1}",
+                                        color = if (isCurrent) {
+                                            lightCopper
+                                        } else {
+                                            muted
+                                        },
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.width(28.dp)
+                                    )
+
+                                    Icon(
+                                        Icons.Default.MusicNote,
+                                        contentDescription = null,
+                                        tint = if (isCurrent) {
+                                            lightCopper
+                                        } else {
+                                            copper
+                                        },
+                                        modifier = Modifier.size(21.dp)
+                                    )
+
+                                    Spacer(Modifier.width(12.dp))
+
+                                    Column(
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            track.title,
+                                            color = if (isCurrent) {
+                                                lightCopper
+                                            } else {
+                                                Color.White
+                                            },
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isCurrent) {
+                                                FontWeight.Bold
+                                            } else {
+                                                FontWeight.Medium
+                                            },
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+
+                                        Spacer(Modifier.height(3.dp))
+
+                                        Text(
+                                            track.artist,
+                                            color = muted,
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    if (isCurrent) {
+                                        Text(
+                                            "PLAYING",
+                                            color = lightCopper,
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                HorizontalDivider(
+                                    color = line.copy(alpha = 0.5f)
+                                )
+                            }
+                        }
+                    }
+                }
+
             } else {
+
+                // MAIN AFRICAN COPPER HOME SCREEN
 
                 Column(
                     modifier = Modifier
@@ -934,7 +1418,7 @@ class MainActivity : ComponentActivity() {
 
                     Spacer(Modifier.height(8.dp))
 
-                    // NOW PLAYING PANEL
+                    // CLICKABLE NOW PLAYING PANEL
 
                     Card(
                         modifier = Modifier
@@ -943,7 +1427,11 @@ class MainActivity : ComponentActivity() {
                                 1.dp,
                                 copper.copy(alpha = 0.65f),
                                 RoundedCornerShape(18.dp)
-                            ),
+                            )
+                            .clickable {
+                                updateQueue(mediaController ?: return@clickable)
+                                showQueue = true
+                            },
                         shape = RoundedCornerShape(18.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = panel
@@ -969,6 +1457,15 @@ class MainActivity : ComponentActivity() {
                                     letterSpacing = 2.sp,
                                     modifier = Modifier.weight(1f)
                                 )
+
+                                Text(
+                                    "VIEW QUEUE  ›",
+                                    color = copper,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Spacer(Modifier.width(8.dp))
 
                                 Text(
                                     if (isPlaying) "● PLAYING" else "● READY",
@@ -1000,8 +1497,6 @@ class MainActivity : ComponentActivity() {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-
-                                // SHUFFLE ICON
 
                                 IconButton(
                                     onClick = {
@@ -1083,11 +1578,6 @@ class MainActivity : ComponentActivity() {
                                         fontSize = 21.sp
                                     )
                                 }
-
-                                // REPEAT CYCLE:
-                                // 0 = OFF
-                                // 1 = REPEAT PLAYLIST
-                                // 2 = REPEAT CURRENT SONG
 
                                 IconButton(
                                     onClick = {
