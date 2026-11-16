@@ -112,10 +112,11 @@ fun EqualizerScreen(
     }
 
     var volume by remember {
-        mutableIntStateOf(
-            preferences.getInt("volume", 100).coerceIn(0, 200)
-        )
-    }
+    mutableIntStateOf(
+        ((preferences.all["volume"] as? Number)?.toInt() ?: 100)
+            .coerceIn(0, 200)
+    )
+}
 
     var pendingVolume by remember { mutableIntStateOf(volume) }
     var showVolumeWarning by remember { mutableStateOf(false) }
