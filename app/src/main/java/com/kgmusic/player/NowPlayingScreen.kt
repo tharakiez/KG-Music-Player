@@ -1,3 +1,4 @@
+
 package com.kgmusic.player
 
 import androidx.compose.foundation.Image
@@ -102,12 +103,11 @@ fun NowPlayingScreen(
         return "%d:%02d".format(minutes, seconds)
     }
 
-    fun changeSpeed(amount: Float) {
-        val nextSpeed = (speed + amount).coerceIn(0.5f, 2f)
-        speed = nextSpeed
+    fun setTempo(newSpeed: Float) {
+        speed = newSpeed
 
         controller?.setPlaybackParameters(
-            PlaybackParameters(nextSpeed, 1f)
+            PlaybackParameters(newSpeed, 1f)
         )
     }
 
@@ -291,7 +291,7 @@ fun NowPlayingScreen(
 
                 Spacer(Modifier.height(6.dp))
 
-                // SPEED AND SEEK CONTROLS
+                // FIXED TEMPO AND 10-SECOND SEEK CONTROLS
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -309,38 +309,48 @@ fun NowPlayingScreen(
                         enabled = connected
                     ) {
                         Text(
-                            "−10 SEC",
+                            "−10",
                             color = KGLightGold,
-                            fontSize = 10.sp
+                            fontSize = 12.sp
                         )
                     }
 
                     TextButton(
-                        onClick = { changeSpeed(-0.1f) },
+                        onClick = { setTempo(0.8f) },
                         enabled = connected
                     ) {
                         Text(
-                            "SLOW DOWN",
-                            color = KGLightGold,
-                            fontSize = 9.sp
+                            "80%",
+                            color = if (speed == 0.8f) {
+                                KGLightGold
+                            } else {
+                                KGMuted
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
                     Text(
-                        "%.1f×".format(speed),
+                        "${(speed * 100).toInt()}%",
                         color = KGLightGold,
-                        fontSize = 17.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
 
                     TextButton(
-                        onClick = { changeSpeed(0.1f) },
+                        onClick = { setTempo(1.2f) },
                         enabled = connected
                     ) {
                         Text(
-                            "SPEED UP",
-                            color = KGLightGold,
-                            fontSize = 9.sp
+                            "120%",
+                            color = if (speed == 1.2f) {
+                                KGLightGold
+                            } else {
+                                KGMuted
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
@@ -356,9 +366,9 @@ fun NowPlayingScreen(
                         enabled = connected
                     ) {
                         Text(
-                            "+10 SEC",
+                            "+10",
                             color = KGLightGold,
-                            fontSize = 10.sp
+                            fontSize = 12.sp
                         )
                     }
                 }
