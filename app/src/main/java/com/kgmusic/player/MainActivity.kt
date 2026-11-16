@@ -471,6 +471,7 @@ class MainActivity : ComponentActivity() {
 
                 EqualizerScreen(
                     onBack = { showEqualizer = false },
+                    audioEffects = audioEffects
                 )
 
             } else if (showPlaylists) {
