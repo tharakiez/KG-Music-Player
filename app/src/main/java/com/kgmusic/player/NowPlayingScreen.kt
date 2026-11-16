@@ -103,7 +103,6 @@ fun NowPlayingScreen(
         return "%d:%02d".format(minutes, seconds)
     }
 
-    // TEMPO BUTTONS TOGGLE BETWEEN SELECTED SPEED AND NORMAL
     fun setTempo(newSpeed: Float) {
         val nextSpeed = if (speed == newSpeed) {
             1.0f
@@ -122,6 +121,8 @@ fun NowPlayingScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(KGBlack)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
 
@@ -213,7 +214,6 @@ fun NowPlayingScreen(
 
                 Spacer(Modifier.height(10.dp))
 
-                // YOUR PORTRAIT
                 Image(
                     painter = painterResource(
                         id = R.drawable.kg_portrait
