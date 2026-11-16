@@ -4,12 +4,15 @@ package com.kgmusic.player
 import android.media.audiofx.Equalizer
 import android.media.audiofx.BassBoost
 import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.Virtualizer
+import kotlin.math.log10
 
 class AudioEffects(audioSessionId: Int) {
 
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var virtualizer: Virtualizer? = null
 
     val frequencies = listOf(
         31, 62, 125, 250, 500,
@@ -41,6 +44,14 @@ class AudioEffects(audioSessionId: Int) {
         } catch (_: Exception) {
             loudnessEnhancer = null
         }
+
+        try {
+            virtualizer = Virtualizer(0, audioSessionId).apply {
+                enabled = true
+            }
+        } catch (_: Exception) {
+            virtualizer = null
+        }
     }
 
     fun getAvailableBands(): Int {
@@ -51,10 +62,25 @@ class AudioEffects(audioSessionId: Int) {
         }
     }
 
+    fun setEqualizerEnabled(enabled: Boolean) {
+        try {
+            equalizer?.enabled = enabled
+        } catch (_: Exception) {
+        }
+    }
+
+    fun setVolumeEnabled(enabled: Boolean) {
+        try {
+            loudnessEnhancer?.enabled = enabled
+        } catch (_: Exception) {
+        }
+    }
+
     fun setEqualizerBand(index: Int, level: Int) {
         try {
             val eq = equalizer ?: return
             val range = eq.bandLevelRange
+
             val safeLevel = level.coerceIn(
                 range[0].toInt(),
                 range[1].toInt()
@@ -62,6 +88,7 @@ class AudioEffects(audioSessionId: Int) {
 
             val frequency = frequencies.getOrNull(index) ?: return
             val bandCount = eq.numberOfBands.toInt()
+
             if (bandCount <= 0) return
 
             var closestBand = 0
@@ -97,19 +124,49 @@ class AudioEffects(audioSessionId: Int) {
         }
     }
 
-    fun setVolumeBoost(percent: Int) {
+    fun setBassEnabled(enabled: Boolean) {
         try {
-            val safePercent = percent.coerceIn(100, 200)
+            bassBoost?.enabled = enabled
+        } catch (_: Exception) {
+        }
+    }
 
-            val gain = (
-                2000.0 * kotlin.math.log10(
-                    safePercent / 100.0
-                )
-            ).toInt()
-
-            loudnessEnhancer?.setTargetGain(
-                gain.coerceIn(0, 6000)
+    fun setVirtualizer(strength: Int) {
+        try {
+            virtualizer?.setStrength(
+                strength.coerceIn(0, 1000).toShort()
             )
+        } catch (_: Exception) {
+        }
+    }
+
+    fun setVirtualizerEnabled(enabled: Boolean) {
+        try {
+            virtualizer?.enabled = enabled
+        } catch (_: Exception) {
+        }
+    }
+
+    // Retained for compatibility with the existing EQ screen.
+    fun setVolumeBoost(percent: Int) {
+        setVolumeLevel(percent)
+    }
+
+    // Supports Mute, reduced volume, normal volume and boosted volume.
+    // The screen must request confirmation before applying values above 100%.
+    fun setVolumeLevel(percent: Int) {
+        try {
+            val safePercent = percent.coerceIn(0, 200)
+
+            val gain = if (safePercent == 0) {
+                -6000
+            } else {
+                (
+                    2000.0 * log10(safePercent / 100.0)
+                ).toInt().coerceIn(-6000, 6000)
+            }
+
+            loudnessEnhancer?.setTargetGain(gain)
         } catch (_: Exception) {
         }
     }
@@ -117,13 +174,27 @@ class AudioEffects(audioSessionId: Int) {
     fun release() {
         try {
             equalizer?.release()
+        } catch (_: Exception) {
+        }
+
+        try {
             bassBoost?.release()
+        } catch (_: Exception) {
+        }
+
+        try {
             loudnessEnhancer?.release()
+        } catch (_: Exception) {
+        }
+
+        try {
+            virtualizer?.release()
         } catch (_: Exception) {
         }
 
         equalizer = null
         bassBoost = null
         loudnessEnhancer = null
+        virtualizer = null
     }
 }
