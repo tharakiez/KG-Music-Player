@@ -103,11 +103,18 @@ fun NowPlayingScreen(
         return "%d:%02d".format(minutes, seconds)
     }
 
+    // TEMPO BUTTONS TOGGLE BETWEEN SELECTED SPEED AND NORMAL
     fun setTempo(newSpeed: Float) {
-        speed = newSpeed
+        val nextSpeed = if (speed == newSpeed) {
+            1.0f
+        } else {
+            newSpeed
+        }
+
+        speed = nextSpeed
 
         controller?.setPlaybackParameters(
-            PlaybackParameters(newSpeed, 1f)
+            PlaybackParameters(nextSpeed, 1f)
         )
     }
 
@@ -291,7 +298,7 @@ fun NowPlayingScreen(
 
                 Spacer(Modifier.height(6.dp))
 
-                // FIXED TEMPO AND 10-SECOND SEEK CONTROLS
+                // TEMPO AND 10-SECOND SEEK CONTROLS
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
