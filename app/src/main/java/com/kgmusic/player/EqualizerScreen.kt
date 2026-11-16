@@ -2,28 +2,50 @@
 package com.kgmusic.player
 
 import android.content.Context
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import kotlin.math.cos
+import kotlin.math.sin
+
+private val EQBlack = Color(0xFF090706)
+private val EQPanel = Color(0xFF1C1511)
+private val EQCopper = Color(0xFFB87333)
+private val EQGold = Color(0xFFE0B16D)
+private val EQMuted = Color(0xFFAA9380)
 
 @Composable
 fun EqualizerScreen(
     onBack: () -> Unit,
     audioEffects: AudioEffects? = null
 ) {
-    val gold = Color(0xFFFFC400)
-    val black = Color(0xFF080808)
-
     val context = LocalContext.current
 
     val preferences = remember(context) {
@@ -34,19 +56,20 @@ fun EqualizerScreen(
     }
 
     val frequencies = listOf(
-        "31 Hz", "62 Hz", "125 Hz", "250 Hz", "500 Hz",
-        "1 kHz", "2 kHz", "4 kHz", "8 kHz", "16 kHz"
+        "31", "62", "125", "250", "500",
+        "1k", "2k", "4k", "8k", "16k"
     )
 
-    val savedLevels = remember(preferences) {
-        List(10) { index ->
-            preferences.getFloat("eq_$index", 0f)
-        }
-    }
+    val presets = listOf(
+        "Normal", "Rock", "Pop", "Jazz",
+        "Classical", "Dance", "Bass"
+    )
 
     val levels = remember {
         mutableStateListOf<Float>().apply {
-            addAll(savedLevels)
+            repeat(10) { index ->
+                add(preferences.getFloat("eq_$index", 0f))
+            }
         }
     }
 
@@ -59,7 +82,20 @@ fun EqualizerScreen(
     var volume by remember {
         mutableFloatStateOf(
             preferences.getFloat("volume", 100f)
+                .coerceIn(100f, 200f)
         )
+    }
+
+    var volumeDial by remember {
+        mutableFloatStateOf(volume)
+    }
+
+    var pendingVolume by remember {
+        mutableFloatStateOf(volume)
+    }
+
+    var showVolumeWarning by remember {
+        mutableStateOf(false)
     }
 
     var preset by remember {
@@ -68,9 +104,86 @@ fun EqualizerScreen(
         )
     }
 
-    var expanded by remember { mutableStateOf(false) }
+    fun saveLevels() {
+        preferences.edit().apply {
+            levels.forEachIndexed { index, value ->
+                putFloat("eq_$index", value)
+            }
+            putString("preset", preset)
+        }.apply()
+    }
 
-    // Restore saved settings whenever the audio effect engine is available.
+    fun applyPreset(name: String) {
+        val values = when (name) {
+            "Rock" -> listOf(
+                4f, 3f, -1f, -2f, 1f,
+                3f, 4f, 4f, 3f, 3f
+            )
+
+            "Pop" -> listOf(
+                -1f, 2f, 4f, 4f, 1f,
+                -1f, -1f, 0f, 2f, 2f
+            )
+
+            "Jazz" -> listOf(
+                3f, 2f, 1f, 2f, -2f,
+                -2f, 0f, 2f, 3f, 4f
+            )
+
+            "Classical" -> listOf(
+                4f, 3f, 2f, 1f, -1f,
+                -1f, 0f, 2f, 3f, 4f
+            )
+
+            "Dance" -> listOf(
+                5f, 4f, 2f, 0f, 1f,
+                3f, 4f, 3f, 2f, 2f
+            )
+
+            "Bass" -> listOf(
+                6f, 5f, 4f, 2f, 0f,
+                0f, 0f, 0f, 0f, 0f
+            )
+
+            else -> List(10) { 0f }
+        }
+
+        preset = name
+
+        values.forEachIndexed { index, value ->
+            levels[index] = value
+            audioEffects?.setEqualizerBand(
+                index,
+                (value * 100).toInt()
+            )
+        }
+
+        saveLevels()
+    }
+
+    fun applyVolume(value: Float) {
+        volume = value.coerceIn(100f, 200f)
+        volumeDial = volume
+
+        audioEffects?.setVolumeBoost(volume.toInt())
+
+        preferences.edit()
+            .putFloat("volume", volume)
+            .apply()
+    }
+
+    fun changeBass(value: Float) {
+        bass = value.coerceIn(0f, 100f)
+
+        audioEffects?.setBassBoost(
+            (bass * 10).toInt()
+        )
+
+        preferences.edit()
+            .putFloat("bass", bass)
+            .apply()
+    }
+
     LaunchedEffect(audioEffects) {
         audioEffects?.let { effects ->
             levels.forEachIndexed { index, value ->
@@ -88,217 +201,449 @@ fun EqualizerScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(black)
+            .background(EQBlack)
             .verticalScroll(rememberScrollState())
-            .padding(18.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         TextButton(onClick = onBack) {
-            Text("← BACK", color = gold)
+            Text("← BACK", color = EQGold)
         }
 
         Text(
             "KG SOUND ENGINE",
-            color = gold,
-            fontSize = 25.sp
+            color = EQGold,
+            fontSize = 23.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.sp
         )
 
         Text(
-            "10-BAND EQUALIZER",
-            color = Color.White,
-            fontSize = 17.sp
+            "SHAPE YOUR SOUND",
+            color = EQMuted,
+            fontSize = 10.sp,
+            letterSpacing = 3.sp
         )
-
-        Spacer(Modifier.height(15.dp))
-
-        Text("PRESETS", color = gold)
-
-        Box {
-            OutlinedButton(
-                onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(preset, color = Color.White)
-            }
-
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                listOf(
-                    "Normal", "Rock", "Pop", "Jazz",
-                    "Classical", "Dance", "Bass"
-                ).forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option) },
-                        onClick = {
-                            preset = option
-
-                            val values = when (option) {
-                                "Rock" -> listOf(4f, 3f, -1f, -2f, 1f, 3f, 4f, 4f, 3f, 3f)
-                                "Pop" -> listOf(-1f, 2f, 4f, 4f, 1f, -1f, -1f, 0f, 2f, 2f)
-                                "Jazz" -> listOf(3f, 2f, 1f, 2f, -2f, -2f, 0f, 2f, 3f, 4f)
-                                "Classical" -> listOf(4f, 3f, 2f, 1f, -1f, -1f, 0f, 2f, 3f, 4f)
-                                "Dance" -> listOf(5f, 4f, 2f, 0f, 1f, 3f, 4f, 3f, 2f, 2f)
-                                "Bass" -> listOf(6f, 5f, 4f, 2f, 0f, 0f, 0f, 0f, 0f, 0f)
-                                else -> List(10) { 0f }
-                            }
-
-                            values.forEachIndexed { index, value ->
-                                levels[index] = value
-
-                                audioEffects?.setEqualizerBand(
-                                    index,
-                                    (value * 100).toInt()
-                                )
-                            }
-
-                            preferences.edit().apply {
-                                putString("preset", option)
-
-                                values.forEachIndexed { index, value ->
-                                    putFloat("eq_$index", value)
-                                }
-                            }.apply()
-
-                            expanded = false
-                        }
-                    )
-                }
-            }
-        }
 
         Spacer(Modifier.height(18.dp))
 
-        frequencies.forEachIndexed { index, frequency ->
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(frequency, color = Color.White)
+        Text(
+            "SOUND PRESETS",
+            color = EQGold,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
 
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            presets.forEach { option ->
+                val selected = preset == option
+
+                Surface(
+                    onClick = { applyPreset(option) },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (selected) EQCopper else EQPanel,
+                    border = BorderStroke(
+                        1.dp,
+                        if (selected) EQGold else EQCopper.copy(alpha = 0.5f)
+                    )
+                ) {
                     Text(
-                        "${levels[index].toInt()} dB",
-                        color = gold
+                        option,
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(
+                            horizontal = 13.dp,
+                            vertical = 9.dp
+                        )
                     )
                 }
-
-                Slider(
-                    value = levels[index],
-                    onValueChange = { value ->
-                        levels[index] = value
-                        preset = "Custom"
-
-                        audioEffects?.setEqualizerBand(
-                            index,
-                            (value * 100).toInt()
-                        )
-
-                        preferences.edit()
-                            .putFloat("eq_$index", value)
-                            .putString("preset", "Custom")
-                            .apply()
-                    },
-                    valueRange = -15f..15f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = gold,
-                        activeTrackColor = gold
-                    )
-                )
             }
         }
 
-        HorizontalDivider(color = Color.DarkGray)
+        Spacer(Modifier.height(16.dp))
 
-        Spacer(Modifier.height(15.dp))
-
-        Text("BASS BOOST", color = gold)
-
-        Slider(
-            value = bass,
-            onValueChange = { value ->
-                bass = value
-
-                audioEffects?.setBassBoost(
-                    (value * 10).toInt()
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = EQPanel
+            ),
+            border = BorderStroke(1.dp, EQCopper.copy(alpha = 0.6f))
+        ) {
+            Column(Modifier.padding(12.dp)) {
+                Text(
+                    "10-BAND EQUALIZER",
+                    color = EQGold,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
                 )
 
-                preferences.edit()
-                    .putFloat("bass", value)
-                    .apply()
-            },
-            valueRange = 0f..100f,
-            colors = SliderDefaults.colors(
-                thumbColor = gold,
-                activeTrackColor = gold
-            )
-        )
+                Text(
+                    "Fine tune each frequency",
+                    color = EQMuted,
+                    fontSize = 10.sp
+                )
 
-        Text("${bass.toInt()}%", color = Color.White)
+                Spacer(Modifier.height(10.dp))
 
-        Spacer(Modifier.height(15.dp))
+                for (rowIndex in 0 until 5) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        for (columnIndex in 0 until 2) {
+                            val index = rowIndex * 2 + columnIndex
 
-        Text("VOLUME BOOST", color = gold)
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        "${frequencies[index]} Hz",
+                                        color = EQMuted,
+                                        fontSize = 10.sp
+                                    )
 
-        Slider(
-            value = volume,
-            onValueChange = { value ->
-                volume = value
+                                    Text(
+                                        "${levels[index].toInt()} dB",
+                                        color = EQGold,
+                                        fontSize = 10.sp
+                                    )
+                                }
 
-                audioEffects?.setVolumeBoost(value.toInt())
+                                Slider(
+                                    value = levels[index],
+                                    onValueChange = { value ->
+                                        levels[index] = value
+                                        preset = "Custom"
 
-                preferences.edit()
-                    .putFloat("volume", value)
-                    .apply()
-            },
-            valueRange = 100f..200f,
-            colors = SliderDefaults.colors(
-                thumbColor = gold,
-                activeTrackColor = gold
-            )
-        )
+                                        audioEffects?.setEqualizerBand(
+                                            index,
+                                            (value * 100).toInt()
+                                        )
+                                    },
+                                    onValueChangeFinished = {
+                                        saveLevels()
+                                    },
+                                    valueRange = -15f..15f,
+                                    modifier = Modifier.height(30.dp),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = EQGold,
+                                        activeTrackColor = EQCopper,
+                                        inactiveTrackColor = EQMuted.copy(alpha = 0.3f)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
 
         Text(
-            "${volume.toInt()}%",
-            color = gold,
-            fontSize = 22.sp
+            "SOUND ENHANCEMENT",
+            color = EQGold,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
         )
+
+        Spacer(Modifier.height(9.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Card(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = EQPanel
+                ),
+                border = BorderStroke(1.dp, EQCopper)
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "BASS BOOST",
+                        color = EQGold,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(Modifier.height(7.dp))
+
+                    BoostDial(
+                        value = bass,
+                        maximum = 100f,
+                        display = "${bass.toInt()}%",
+                        modifier = Modifier.size(104.dp)
+                    )
+
+                    Slider(
+                        value = bass,
+                        onValueChange = { changeBass(it) },
+                        valueRange = 0f..100f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = EQGold,
+                            activeTrackColor = EQCopper,
+                            inactiveTrackColor = EQMuted.copy(alpha = 0.3f)
+                        )
+                    )
+
+                    Text(
+                        "BASS POWER",
+                        color = EQMuted,
+                        fontSize = 9.sp
+                    )
+                }
+            }
+
+            Card(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = EQPanel
+                ),
+                border = BorderStroke(1.dp, EQCopper)
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "VOLUME BOOST",
+                        color = EQGold,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(Modifier.height(7.dp))
+
+                    BoostDial(
+                        value = volumeDial - 100f,
+                        maximum = 100f,
+                        display = "${volumeDial.toInt()}%",
+                        modifier = Modifier.size(104.dp)
+                    )
+
+                    Slider(
+                        value = volumeDial,
+                        onValueChange = { volumeDial = it },
+                        onValueChangeFinished = {
+                            if (volumeDial > 100f) {
+                                pendingVolume = volumeDial
+                                volumeDial = volume
+                                showVolumeWarning = true
+                            } else {
+                                applyVolume(volumeDial)
+                            }
+                        },
+                        valueRange = 100f..200f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = EQGold,
+                            activeTrackColor = EQCopper,
+                            inactiveTrackColor = EQMuted.copy(alpha = 0.3f)
+                        )
+                    )
+
+                    Text(
+                        "100% = NORMAL",
+                        color = EQMuted,
+                        fontSize = 9.sp
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
 
         Text(
-            "High volume may cause distortion or hearing damage.",
-            color = Color.LightGray,
-            fontSize = 11.sp
+            "Volume above 100% requires your confirmation.",
+            color = EQMuted,
+            fontSize = 10.sp
         )
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(18.dp))
 
         Button(
             onClick = {
-                levels.indices.forEach { index ->
-                    levels[index] = 0f
-                    audioEffects?.setEqualizerBand(index, 0)
-                }
-
-                bass = 0f
-                volume = 100f
-                preset = "Normal"
-
-                audioEffects?.setBassBoost(0)
-                audioEffects?.setVolumeBoost(100)
-
-                preferences.edit().apply {
-                    for (index in 0 until 10) {
-                        putFloat("eq_$index", 0f)
-                    }
-
-                    putFloat("bass", 0f)
-                    putFloat("volume", 100f)
-                    putString("preset", "Normal")
-                }.apply()
+                applyPreset("Normal")
+                changeBass(0f)
+                applyVolume(100f)
+                pendingVolume = 100f
+                volumeDial = 100f
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = EQCopper
+            )
         ) {
-            Text("RESET SOUND SETTINGS")
+            Text(
+                "RESET SOUND SETTINGS",
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
         }
+
+        Spacer(Modifier.height(20.dp))
+    }
+
+    if (showVolumeWarning) {
+        AlertDialog(
+            onDismissRequest = {
+                showVolumeWarning = false
+                volumeDial = volume
+            },
+            containerColor = EQPanel,
+            title = {
+                Text(
+                    "HIGH VOLUME WARNING",
+                    color = EQGold,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    "You requested ${pendingVolume.toInt()}% volume. " +
+                        "High volume can damage hearing or cause audio distortion. " +
+                        "Do you want to proceed?",
+                    color = Color.White
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        applyVolume(pendingVolume)
+                        showVolumeWarning = false
+                    }
+                ) {
+                    Text(
+                        "YES, PROCEED",
+                        color = EQGold,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showVolumeWarning = false
+                        volumeDial = volume
+                    }
+                ) {
+                    Text(
+                        "NO, CANCEL",
+                        color = EQMuted
+                    )
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun BoostDial(
+    value: Float,
+    maximum: Float,
+    display: String,
+    modifier: Modifier = Modifier
+) {
+    val progress = (value / maximum).coerceIn(0f, 1f)
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val strokeWidth = 8.dp.toPx()
+            val diameter = size.minDimension - strokeWidth
+            val topLeft = Offset(
+                (size.width - diameter) / 2f,
+                (size.height - diameter) / 2f
+            )
+
+            drawArc(
+                color = EQMuted.copy(alpha = 0.25f),
+                startAngle = 135f,
+                sweepAngle = 270f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = androidx.compose.ui.geometry.Size(
+                    diameter,
+                    diameter
+                ),
+                style = Stroke(
+                    width = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            )
+
+            drawArc(
+                color = EQGold,
+                startAngle = 135f,
+                sweepAngle = 270f * progress,
+                useCenter = false,
+                topLeft = topLeft,
+                size = androidx.compose.ui.geometry.Size(
+                    diameter,
+                    diameter
+                ),
+                style = Stroke(
+                    width = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            )
+
+            val angle = Math.toRadians(
+                (135f + 270f * progress).toDouble()
+            )
+
+            val radius = diameter / 2f
+            val center = Offset(
+                size.width / 2f,
+                size.height / 2f
+            )
+
+            val end = Offset(
+                center.x + cos(angle).toFloat() * radius * 0.72f,
+                center.y + sin(angle).toFloat() * radius * 0.72f
+            )
+
+            drawLine(
+                color = EQCopper,
+                start = center,
+                end = end,
+                strokeWidth = 4.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+
+            drawCircle(
+                color = EQGold,
+                radius = 5.dp.toPx(),
+                center = center
+            )
+        }
+
+        Text(
+            display,
+            color = EQGold,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
