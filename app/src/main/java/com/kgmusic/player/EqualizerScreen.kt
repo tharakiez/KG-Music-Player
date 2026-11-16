@@ -32,7 +32,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
-import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -154,6 +153,7 @@ fun EqualizerScreen(
                 (levels[index] * 100).toInt()
             )
         }
+
         saveBand(index)
     }
 
@@ -192,7 +192,11 @@ fun EqualizerScreen(
 
             audioEffects?.setEqualizerBand(
                 bandIndexes[index],
-                if (bandEnabled[index]) (value * 100).toInt() else 0
+                if (bandEnabled[index]) {
+                    (value * 100).toInt()
+                } else {
+                    0
+                }
             )
         }
 
@@ -439,9 +443,11 @@ fun EqualizerScreen(
                     onPower = {
                         bassEnabled = !bassEnabled
                         audioEffects?.setBassEnabled(bassEnabled)
+
                         if (bassEnabled) {
                             audioEffects?.setBassBoost((bass * 10).toInt())
                         }
+
                         savePowerSettings()
                     },
                     onValueChange = { changeBass(it) },
@@ -455,11 +461,13 @@ fun EqualizerScreen(
                     onPower = {
                         virtualizerEnabled = !virtualizerEnabled
                         audioEffects?.setVirtualizerEnabled(virtualizerEnabled)
+
                         if (virtualizerEnabled) {
                             audioEffects?.setVirtualizer(
                                 (virtualizer * 10).toInt()
                             )
                         }
+
                         savePowerSettings()
                     },
                     onValueChange = { changeVirtualizer(it) },
@@ -481,6 +489,7 @@ fun EqualizerScreen(
                             color = EQMuted,
                             fontSize = 10.sp
                         )
+
                         Text(
                             if (volume == 0) "MUTED" else "$volume%",
                             color = EQGold,
@@ -562,7 +571,11 @@ fun EqualizerScreen(
                                     color = if (selected) EQCopper else EQMetal,
                                     border = androidx.compose.foundation.BorderStroke(
                                         1.dp,
-                                        if (selected) EQGold else EQCopper.copy(alpha = 0.5f)
+                                        if (selected) {
+                                            EQGold
+                                        } else {
+                                            EQCopper.copy(alpha = 0.5f)
+                                        }
                                     )
                                 ) {
                                     Text(
@@ -603,18 +616,22 @@ fun EqualizerScreen(
                 changeBass(0f)
                 changeVirtualizer(0f)
                 applyVolume(100)
+
                 bandEnabled.indices.forEach {
                     bandEnabled[it] = true
                     saveBand(it)
                 }
+
                 eqEnabled = true
                 volumeEnabled = true
                 bassEnabled = true
                 virtualizerEnabled = true
+
                 audioEffects?.setEqualizerEnabled(true)
                 audioEffects?.setVolumeEnabled(true)
                 audioEffects?.setBassEnabled(true)
                 audioEffects?.setVirtualizerEnabled(true)
+
                 savePowerSettings()
             },
             modifier = Modifier.fillMaxWidth(),
@@ -727,7 +744,9 @@ private fun ModeCard(
                         color = if (active) EQGreen else EQMuted,
                         fontSize = 10.sp
                     )
+
                     Spacer(Modifier.width(6.dp))
+
                     Text(
                         if (active) "ON" else "OFF",
                         color = Color.White,
@@ -791,10 +810,12 @@ private fun VerticalFader(
             .pointerInput(enabled) {
                 fun update(y: Float) {
                     if (!enabled) return
+
                     val top = 10f
                     val bottom = size.height - 10f
                     val progress = (1f - ((y - top) / (bottom - top)))
                         .coerceIn(0f, 1f)
+
                     onValueChange(
                         minValue + progress * (maxValue - minValue)
                     )
@@ -805,9 +826,11 @@ private fun VerticalFader(
             .pointerInput(enabled) {
                 detectDragGestures { change, _ ->
                     change.consume()
+
                     if (enabled) {
                         val top = 10f
                         val bottom = size.height - 10f
+
                         val progress = (
                             1f - ((change.position.y - top) / (bottom - top))
                         ).coerceIn(0f, 1f)
@@ -822,8 +845,10 @@ private fun VerticalFader(
         val centerX = size.width / 2f
         val top = 10f
         val bottom = size.height - 10f
+
         val progress = ((value - minValue) / (maxValue - minValue))
             .coerceIn(0f, 1f)
+
         val thumbY = bottom - progress * (bottom - top)
 
         drawLine(
@@ -836,6 +861,7 @@ private fun VerticalFader(
 
         for (i in 0..12) {
             val y = top + (bottom - top) * i / 12f
+
             drawLine(
                 EQMuted.copy(alpha = 0.65f),
                 Offset(centerX - 13.dp.toPx(), y),
@@ -854,12 +880,17 @@ private fun VerticalFader(
 
         drawRoundRect(
             color = if (enabled) EQGold else EQMuted,
-            topLeft = Offset(centerX - 12.dp.toPx(), thumbY - 5.dp.toPx()),
+            topLeft = Offset(
+                centerX - 12.dp.toPx(),
+                thumbY - 5.dp.toPx()
+            ),
             size = androidx.compose.ui.geometry.Size(
                 24.dp.toPx(),
                 10.dp.toPx()
             ),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                3.dp.toPx()
+            )
         )
     }
 }
@@ -873,9 +904,7 @@ private fun KnobPanel(
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    ConsolePanel(
-        title = title
-    ) {
+    ConsolePanel(title = title) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -925,14 +954,21 @@ private fun RotaryKnob(
 ) {
     val progress = (value / 100f).coerceIn(0f, 1f)
 
+    val latestValue = rememberUpdatedState(value)
+    val latestOnValueChange = rememberUpdatedState(onValueChange)
+
     Box(
         modifier = modifier
             .pointerInput(enabled) {
                 detectDragGestures { change, dragAmount ->
                     change.consume()
+
                     if (enabled) {
-                        onValueChange(
-                            (value - dragAmount.y * 0.8f).coerceIn(0f, 100f)
+                        latestOnValueChange.value(
+                            (
+                                latestValue.value -
+                                    dragAmount.y * 0.8f
+                            ).coerceIn(0f, 100f)
                         )
                     }
                 }
@@ -940,7 +976,11 @@ private fun RotaryKnob(
         contentAlignment = Alignment.Center
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            val center = Offset(size.width / 2f, size.height / 2f)
+            val center = Offset(
+                size.width / 2f,
+                size.height / 2f
+            )
+
             val radius = size.minDimension * 0.39f
             val stroke = 7.dp.toPx()
 
@@ -967,12 +1007,18 @@ private fun RotaryKnob(
                 startAngle = 135f,
                 sweepAngle = 270f,
                 useCenter = false,
-                topLeft = Offset(center.x - radius - 4.dp.toPx(), center.y - radius - 4.dp.toPx()),
+                topLeft = Offset(
+                    center.x - radius - 4.dp.toPx(),
+                    center.y - radius - 4.dp.toPx()
+                ),
                 size = androidx.compose.ui.geometry.Size(
                     (radius + 4.dp.toPx()) * 2,
                     (radius + 4.dp.toPx()) * 2
                 ),
-                style = Stroke(stroke, cap = StrokeCap.Round)
+                style = Stroke(
+                    stroke,
+                    cap = StrokeCap.Round
+                )
             )
 
             drawArc(
@@ -980,12 +1026,18 @@ private fun RotaryKnob(
                 startAngle = 135f,
                 sweepAngle = 270f * progress,
                 useCenter = false,
-                topLeft = Offset(center.x - radius - 4.dp.toPx(), center.y - radius - 4.dp.toPx()),
+                topLeft = Offset(
+                    center.x - radius - 4.dp.toPx(),
+                    center.y - radius - 4.dp.toPx()
+                ),
                 size = androidx.compose.ui.geometry.Size(
                     (radius + 4.dp.toPx()) * 2,
                     (radius + 4.dp.toPx()) * 2
                 ),
-                style = Stroke(stroke, cap = StrokeCap.Round)
+                style = Stroke(
+                    stroke,
+                    cap = StrokeCap.Round
+                )
             )
 
             for (i in 0..10) {
@@ -1008,6 +1060,7 @@ private fun RotaryKnob(
             }
 
             val angle = Math.toRadians(135.0 + 270.0 * progress)
+
             drawLine(
                 EQGold,
                 Offset(
