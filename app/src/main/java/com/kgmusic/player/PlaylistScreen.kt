@@ -27,6 +27,13 @@ fun PlaylistScreen(
 ) {
     val context = LocalContext.current
 
+    val black = Color(0xFF090706)
+    val copper = Color(0xFFB87333)
+    val lightCopper = Color(0xFFE0A06A)
+    val panel = Color(0xFF1C1511)
+    val muted = Color(0xFFAA9380)
+    val line = Color(0xFF493326)
+
     var playlists by remember {
         mutableStateOf(PlaylistStorage.load(context))
     }
@@ -39,11 +46,11 @@ fun PlaylistScreen(
         mutableStateOf(false)
     }
 
-    var showAddSongsDialog by remember {
+    var showAddDialog by remember {
         mutableStateOf(false)
     }
 
-    var showDeleteDialog by remember {
+    var showFolderPrompt by remember {
         mutableStateOf(false)
     }
 
@@ -55,20 +62,137 @@ fun PlaylistScreen(
         mutableStateOf(setOf<String>())
     }
 
-    var message by remember {
-        mutableStateOf("")
+    var browseFolder by remember {
+        mutableStateOf<String?>(null)
     }
 
-    val black = Color(0xFF090706)
-    val copper = Color(0xFFB87333)
-    val lightCopper = Color(0xFFE0A06A)
-    val bronze = Color(0xFF75421F)
-    val panel = Color(0xFF1C1511)
-    val muted = Color(0xFFAA9380)
-    val line = Color(0xFF493326)
+    var pendingFolder by remember {
+        mutableStateOf<String?>(null)
+    }
 
     fun refreshPlaylists() {
         playlists = PlaylistStorage.load(context)
+    }
+
+    fun cleanPath(path: String): String {
+        return path.trim('/')
+    }
+
+    fun folderName(path: String): String {
+        return cleanPath(path).substringAfterLast('/')
+    }
+
+    fun childFolders(path: String): List<String> {
+        val parent = cleanPath(path)
+
+        return songs.mapNotNull { song ->
+            val clean = cleanPath(song.folderPath)
+
+            if (clean.isBlank() || clean == parent) {
+                null
+            } else {
+                val belongs = if (parent.isBlank()) {
+                    true
+                } else {
+                    clean.startsWith("$parent/")
+                }
+
+                if (!belongs) {
+                    null
+                } else {
+                    val remainder = if (parent.isBlank()) {
+                        clean
+                    } else {
+                        clean.removePrefix("$parent/")
+                    }
+
+                    val child = remainder.substringBefore('/')
+
+                    if (child.isBlank()) {
+                        null
+                    } else if (parent.isBlank()) {
+                        child
+                    } else {
+                        "$parent/$child"
+                    }
+                }
+            }
+        }.distinct().sortedBy { it.lowercase() }
+    }
+
+    fun directSongs(path: String): List<Song> {
+        val clean = cleanPath(path)
+
+        return songs.filter {
+            cleanPath(it.folderPath) == clean
+        }.sortedBy { it.title.lowercase() }
+    }
+
+    fun songsInFolder(
+        path: String,
+        includeSubfolders: Boolean
+    ): List<Song> {
+        val clean = cleanPath(path)
+
+        return songs.filter { song ->
+            val songPath = cleanPath(song.folderPath)
+
+            if (includeSubfolders) {
+                songPath == clean || songPath.startsWith("$clean/")
+            } else {
+                songPath == clean
+            }
+        }.sortedWith(
+            compareBy<Song>(
+                { cleanPath(it.folderPath).lowercase() },
+                { it.title.lowercase() }
+            )
+        )
+    }
+
+    fun saveSongsToPlaylist(
+        playlistName: String,
+        songsToAdd: List<Song>
+    ) {
+        songsToAdd.forEach { song ->
+            PlaylistStorage.addSong(
+                context,
+                playlistName,
+                SavedPlaylistSong(
+                    title = song.title,
+                    artist = song.artist,
+                    uri = song.uri.toString(),
+                    folderPath = song.folderPath
+                )
+            )
+        }
+
+        refreshPlaylists()
+    }
+
+    fun addFolderToPlaylist(
+        folder: String,
+        includeSubfolders: Boolean
+    ) {
+        val playlistName = selectedPlaylistName ?: return
+
+        val folderSongs = songsInFolder(
+            folder,
+            includeSubfolders
+        )
+
+        saveSongsToPlaylist(playlistName, folderSongs)
+        pendingFolder = null
+        showFolderPrompt = false
+    }
+
+    fun requestAddFolder(folder: String) {
+        if (childFolders(folder).isNotEmpty()) {
+            pendingFolder = folder
+            showFolderPrompt = true
+        } else {
+            addFolderToPlaylist(folder, false)
+        }
     }
 
     val selectedPlaylist = playlists.firstOrNull {
@@ -79,9 +203,10 @@ fun PlaylistScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(black)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(16.dp)
     ) {
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -96,9 +221,9 @@ fun PlaylistScreen(
                 }
             ) {
                 Text(
-                    "← BACK",
+                    "‹ BACK",
                     color = lightCopper,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 12.sp
                 )
             }
 
@@ -106,66 +231,48 @@ fun PlaylistScreen(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    "MY PLAYLISTS",
+                    "KG MUSIC",
                     color = lightCopper,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 2.sp
                 )
 
                 Text(
-                    "YOUR MUSIC. YOUR OCCASIONS.",
+                    "PLAYLISTS",
                     color = muted,
                     fontSize = 9.sp,
-                    letterSpacing = 1.5.sp
+                    letterSpacing = 2.sp
                 )
+            }
+
+            if (selectedPlaylistName == null) {
+                TextButton(
+                    onClick = {
+                        newPlaylistName = ""
+                        showCreateDialog = true
+                    }
+                ) {
+                    Text(
+                        "+ CREATE",
+                        color = copper,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 
-        HorizontalDivider(
-            modifier = Modifier.padding(vertical = 12.dp),
-            color = line
-        )
+        Spacer(Modifier.height(18.dp))
+        HorizontalDivider(color = line)
+        Spacer(Modifier.height(12.dp))
 
-        if (selectedPlaylist == null) {
-
-            Button(
-                onClick = {
-                    newPlaylistName = ""
-                    showCreateDialog = true
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = bronze
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    "+  CREATE NEW PLAYLIST",
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            Text(
-                "${playlists.size} SAVED PLAYLISTS",
-                color = muted,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp
-            )
-
-            Spacer(Modifier.height(10.dp))
-
+        if (selectedPlaylistName == null) {
             if (playlists.isEmpty()) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
+                        .weight(1f)
+                        .fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -174,211 +281,197 @@ fun PlaylistScreen(
                         Text(
                             "♫",
                             color = copper,
-                            fontSize = 44.sp
+                            fontSize = 38.sp
                         )
 
                         Spacer(Modifier.height(10.dp))
 
                         Text(
-                            "YOUR PLAYLISTS START HERE",
+                            "No playlists yet",
                             color = lightCopper,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
 
                         Text(
-                            "Create a playlist for any occasion.",
+                            "Create a playlist to begin",
                             color = muted,
-                            fontSize = 11.sp
+                            fontSize = 12.sp
                         )
                     }
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(bottom = 12.dp)
                 ) {
                     items(
                         playlists,
                         key = { it.name }
                     ) { playlist ->
-
-                        Card(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     selectedPlaylistName = playlist.name
-                                },
-                            shape = RoundedCornerShape(14.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = panel
-                            )
+                                }
+                                .padding(vertical = 15.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .size(46.dp)
+                                    .background(
+                                        Color(0xFF302016),
+                                        RoundedCornerShape(12.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     "♫",
                                     color = lightCopper,
-                                    fontSize = 27.sp
-                                )
-
-                                Spacer(Modifier.width(14.dp))
-
-                                Column(
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(
-                                        playlist.name,
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp
-                                    )
-
-                                    Text(
-                                        "${playlist.songs.size} songs",
-                                        color = muted,
-                                        fontSize = 11.sp
-                                    )
-                                }
-
-                                Text(
-                                    "OPEN  ›",
-                                    color = copper,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontSize = 23.sp
                                 )
                             }
-                        }
-                    }
-                }
-            }
 
-        } else {
-
-            Text(
-                selectedPlaylist.name,
-                color = Color.White,
-                fontSize = 21.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Text(
-                "${selectedPlaylist.songs.size} SONGS",
-                color = muted,
-                fontSize = 10.sp,
-                letterSpacing = 1.5.sp
-            )
-
-            Spacer(Modifier.height(14.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = {
-                        selectedUris = emptySet()
-                        showAddSongsDialog = true
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = bronze
-                    )
-                ) {
-                    Text("+ ADD SONGS")
-                }
-
-                OutlinedButton(
-                    onClick = { showDeleteDialog = true },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = lightCopper
-                    )
-                ) {
-                    Text("DELETE")
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            Button(
-                onClick = {
-                    val tracks = selectedPlaylist.songs.mapNotNull { saved ->
-                        runCatching {
-                            Song(
-                                title = saved.title,
-                                artist = saved.artist,
-                                uri = Uri.parse(saved.uri),
-                                folderPath = saved.folderPath
-                            )
-                        }.getOrNull()
-                    }
-
-                    if (tracks.isNotEmpty()) {
-                        onPlayPlaylist(tracks)
-                    } else {
-                        message = "This playlist has no songs."
-                    }
-                },
-                enabled = selectedPlaylist.songs.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = copper
-                )
-            ) {
-                Text(
-                    "▶  PLAY THIS PLAYLIST",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            if (selectedPlaylist.songs.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "No songs yet. Add music from your library.",
-                        color = muted,
-                        fontSize = 12.sp
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    items(
-                        selectedPlaylist.songs,
-                        key = { it.uri }
-                    ) { song ->
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "♫",
-                                color = copper,
-                                fontSize = 21.sp
-                            )
-
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(14.dp))
 
                             Column(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
-                                    song.title,
+                                    playlist.name,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Text(
+                                    "${playlist.songs.size} songs",
+                                    color = muted,
+                                    fontSize = 10.sp
+                                )
+                            }
+
+                            Text(
+                                "›",
+                                color = copper,
+                                fontSize = 24.sp
+                            )
+                        }
+
+                        HorizontalDivider(color = line)
+                    }
+                }
+            }
+        } else {
+            val playlist = selectedPlaylist
+
+            if (playlist != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            playlist.name,
+                            color = lightCopper,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Text(
+                            "${playlist.songs.size} songs",
+                            color = muted,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    TextButton(
+                        onClick = {
+                            showAddDialog = true
+                            browseFolder = null
+                            selectedUris = emptySet()
+                        }
+                    ) {
+                        Text(
+                            "+ ADD",
+                            color = copper,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val playable = playlist.songs.mapNotNull { saved ->
+                                songs.firstOrNull {
+                                    it.uri.toString() == saved.uri
+                                }
+                            }
+
+                            if (playable.isNotEmpty()) {
+                                onPlayPlaylist(playable)
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = copper
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("▶ PLAY")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            PlaylistStorage.deletePlaylist(
+                                context,
+                                playlist.name
+                            )
+                            selectedPlaylistName = null
+                            refreshPlaylists()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = lightCopper
+                        ),
+                        border = ButtonDefaults.outlinedButtonBorder
+                    ) {
+                        Text("DELETE")
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = line)
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(bottom = 12.dp)
+                ) {
+                    items(
+                        playlist.songs,
+                        key = { it.uri }
+                    ) { savedSong ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    savedSong.title,
                                     color = Color.White,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Medium,
@@ -386,28 +479,31 @@ fun PlaylistScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
 
-                                Text(
-                                    song.artist,
-                                    color = muted,
-                                    fontSize = 10.sp,
-                                    maxLines = 1
-                                )
+                                if (savedSong.artist.isNotBlank()) {
+                                    Text(
+                                        savedSong.artist,
+                                        color = muted,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
 
                             TextButton(
                                 onClick = {
                                     PlaylistStorage.removeSong(
                                         context,
-                                        selectedPlaylist.name,
-                                        song.uri
+                                        playlist.name,
+                                        savedSong.uri
                                     )
                                     refreshPlaylists()
                                 }
                             ) {
                                 Text(
                                     "REMOVE",
-                                    color = lightCopper,
-                                    fontSize = 9.sp
+                                    color = copper,
+                                    fontSize = 10.sp
                                 )
                             }
                         }
@@ -427,42 +523,50 @@ fun PlaylistScreen(
             containerColor = panel,
             title = {
                 Text(
-                    "CREATE PLAYLIST",
-                    color = lightCopper,
-                    fontWeight = FontWeight.Bold
+                    "Create playlist",
+                    color = lightCopper
                 )
             },
             text = {
                 OutlinedTextField(
                     value = newPlaylistName,
-                    onValueChange = { newPlaylistName = it },
-                    label = { Text("Playlist name") },
+                    onValueChange = {
+                        newPlaylistName = it
+                    },
                     singleLine = true,
+                    placeholder = {
+                        Text(
+                            "Playlist name",
+                            color = muted
+                        )
+                    },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
                         focusedBorderColor = copper,
-                        unfocusedBorderColor = muted,
-                        focusedLabelColor = lightCopper,
-                        unfocusedLabelColor = muted
+                        unfocusedBorderColor = line,
+                        cursorColor = lightCopper
                     )
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val created = PlaylistStorage.createPlaylist(
-                            context,
-                            newPlaylistName
-                        )
+                        val name = newPlaylistName.trim()
 
-                        if (created) {
-                            refreshPlaylists()
-                            showCreateDialog = false
-                            message = "Playlist created."
-                        } else {
-                            message = "Enter a name that is not already used."
+                        if (name.isNotBlank()) {
+                            val created = PlaylistStorage.createPlaylist(
+                                context,
+                                name
+                            )
+
+                            if (created) {
+                                refreshPlaylists()
+                                selectedPlaylistName = name
+                            }
                         }
+
+                        showCreateDialog = false
                     }
                 ) {
                     Text("CREATE", color = lightCopper)
@@ -470,7 +574,9 @@ fun PlaylistScreen(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showCreateDialog = false }
+                    onClick = {
+                        showCreateDialog = false
+                    }
                 ) {
                     Text("CANCEL", color = muted)
                 }
@@ -478,82 +584,157 @@ fun PlaylistScreen(
         )
     }
 
-    if (showAddSongsDialog && selectedPlaylist != null) {
+    if (showAddDialog) {
         AlertDialog(
             onDismissRequest = {
-                showAddSongsDialog = false
+                showAddDialog = false
+                browseFolder = null
+                selectedUris = emptySet()
             },
             containerColor = panel,
             title = {
-                Text(
-                    "ADD SONGS",
-                    color = lightCopper,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text(
+                        "Add songs",
+                        color = lightCopper,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        if (browseFolder == null) {
+                            "Choose a folder or individual songs"
+                        } else {
+                            folderName(browseFolder!!)
+                        },
+                        color = muted,
+                        fontSize = 11.sp
+                    )
+                }
             },
             text = {
-                if (songs.isEmpty()) {
-                    Text(
-                        "No music was found in your library.",
-                        color = muted
-                    )
-                } else {
-                    Column {
-                        Text(
-                            "Select songs from your music library:",
-                            color = muted,
-                            fontSize = 11.sp
+                Column(
+                    modifier = Modifier.heightIn(max = 420.dp)
+                ) {
+                    if (browseFolder != null) {
+                        TextButton(
+                            onClick = {
+                                val current = cleanPath(browseFolder!!)
+                                val parent = current.substringBeforeLast(
+                                    "/",
+                                    missingDelimiterValue = ""
+                                )
+
+                                browseFolder = if (parent.isBlank()) {
+                                    null
+                                } else {
+                                    parent
+                                }
+                            }
+                        ) {
+                            Text(
+                                "‹ BACK TO FOLDERS",
+                                color = lightCopper,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    LazyColumn(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        val folderList = childFolders(
+                            browseFolder ?: ""
                         )
 
-                        Spacer(Modifier.height(8.dp))
-
-                        LazyColumn(
-                            modifier = Modifier.heightIn(max = 360.dp)
-                        ) {
-                            items(
-                                songs,
-                                key = { it.uri.toString() }
-                            ) { song ->
-                                val uri = song.uri.toString()
-
-                                Row(
+                        items(folderList, key = { it }) { folder ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "▣  ${folderName(folder)}",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
                                     modifier = Modifier
-                                        .fillMaxWidth()
+                                        .weight(1f)
                                         .clickable {
-                                            selectedUris =
-                                                if (uri in selectedUris) {
-                                                    selectedUris - uri
-                                                } else {
-                                                    selectedUris + uri
-                                                }
+                                            browseFolder = folder
                                         }
-                                        .padding(vertical = 5.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(vertical = 8.dp)
+                                )
+
+                                TextButton(
+                                    onClick = {
+                                        requestAddFolder(folder)
+                                    }
                                 ) {
-                                    Checkbox(
-                                        checked = uri in selectedUris,
-                                        onCheckedChange = { checked ->
-                                            selectedUris =
-                                                if (checked) {
-                                                    selectedUris + uri
-                                                } else {
-                                                    selectedUris - uri
-                                                }
-                                        },
-                                        colors = CheckboxDefaults.colors(
-                                            checkedColor = copper
-                                        )
+                                    Text(
+                                        "ADD",
+                                        color = copper,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+
+                            HorizontalDivider(color = line)
+                        }
+
+                        val currentFolderSongs = if (browseFolder == null) {
+                            emptyList()
+                        } else {
+                            directSongs(browseFolder!!)
+                        }
+
+                        items(
+                            currentFolderSongs,
+                            key = { it.uri.toString() }
+                        ) { song ->
+                            val uri = song.uri.toString()
+                            val checked = selectedUris.contains(uri)
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedUris = if (checked) {
+                                            selectedUris - uri
+                                        } else {
+                                            selectedUris + uri
+                                        }
+                                    }
+                                    .padding(vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = { isChecked ->
+                                        selectedUris = if (isChecked) {
+                                            selectedUris + uri
+                                        } else {
+                                            selectedUris - uri
+                                        }
+                                    },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = copper,
+                                        uncheckedColor = muted,
+                                        checkmarkColor = Color.White
+                                    )
+                                )
+
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        song.title,
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
 
-                                    Column {
-                                        Text(
-                                            song.title,
-                                            color = Color.White,
-                                            fontSize = 12.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-
+                                    if (song.artist.isNotBlank()) {
                                         Text(
                                             song.artist,
                                             color = muted,
@@ -564,105 +745,87 @@ fun PlaylistScreen(
                             }
                         }
                     }
+
+                    Text(
+                        "${selectedUris.size} songs selected",
+                        color = lightCopper,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        selectedUris.forEach { uri ->
-                            val song = songs.firstOrNull {
-                                it.uri.toString() == uri
+                        val playlistName = selectedPlaylistName
+
+                        if (playlistName != null) {
+                            val chosenSongs = songs.filter {
+                                selectedUris.contains(it.uri.toString())
                             }
 
-                            if (song != null) {
-                                PlaylistStorage.addSong(
-                                    context,
-                                    selectedPlaylist.name,
-                                    SavedPlaylistSong(
-                                        title = song.title,
-                                        artist = song.artist,
-                                        uri = song.uri.toString(),
-                                        folderPath = song.folderPath
-                                    )
-                                )
-                            }
+                            saveSongsToPlaylist(
+                                playlistName,
+                                chosenSongs
+                            )
                         }
 
-                        refreshPlaylists()
-                        showAddSongsDialog = false
+                        showAddDialog = false
+                        browseFolder = null
                         selectedUris = emptySet()
-                        message = "Selected songs have been added."
                     }
                 ) {
-                    Text(
-                        "ADD SELECTED (${selectedUris.size})",
-                        color = lightCopper
-                    )
+                    Text("ADD SELECTED", color = lightCopper)
                 }
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showAddSongsDialog = false }
+                    onClick = {
+                        showAddDialog = false
+                        browseFolder = null
+                        selectedUris = emptySet()
+                    }
                 ) {
-                    Text("CANCEL", color = muted)
+                    Text("DONE", color = muted)
                 }
             }
         )
     }
 
-    if (showDeleteDialog && selectedPlaylist != null) {
+    if (showFolderPrompt) {
         AlertDialog(
             onDismissRequest = {
-                showDeleteDialog = false
+                showFolderPrompt = false
+                pendingFolder = null
             },
             containerColor = panel,
             title = {
                 Text(
-                    "DELETE PLAYLIST?",
-                    color = lightCopper
-                )
-            },
-            text = {
-                Text(
-                    "Delete '${selectedPlaylist.name}'? This will remove the saved playlist, but will not delete your music files.",
-                    color = Color.White
+                    "Add subfolders too?",
+                    color = lightCopper,
+                    fontWeight = FontWeight.Bold
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        PlaylistStorage.deletePlaylist(
-                            context,
-                            selectedPlaylist.name
-                        )
-                        refreshPlaylists()
-                        selectedPlaylistName = null
-                        showDeleteDialog = false
+                        pendingFolder?.let {
+                            addFolderToPlaylist(it, true)
+                        }
                     }
                 ) {
-                    Text("DELETE", color = lightCopper)
+                    Text("YES", color = lightCopper)
                 }
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showDeleteDialog = false }
+                    onClick = {
+                        pendingFolder?.let {
+                            addFolderToPlaylist(it, false)
+                        }
+                    }
                 ) {
-                    Text("CANCEL", color = muted)
-                }
-            }
-        )
-    }
-
-    if (message.isNotEmpty()) {
-        AlertDialog(
-            onDismissRequest = { message = "" },
-            containerColor = panel,
-            text = {
-                Text(message, color = Color.White)
-            },
-            confirmButton = {
-                TextButton(onClick = { message = "" }) {
-                    Text("OK", color = lightCopper)
+                    Text("NO", color = muted)
                 }
             }
         )
