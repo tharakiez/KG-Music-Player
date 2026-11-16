@@ -15,11 +15,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +36,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -66,6 +69,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         connectPlaybackService()
+
         setContent {
             KGMusicApp()
         }
@@ -284,18 +288,27 @@ class MainActivity : ComponentActivity() {
         val currentSong by currentSongState
         val isPlaying by playingState
 
+        val black = Color(0xFF090706)
+        val copper = Color(0xFFB87333)
+        val lightCopper = Color(0xFFE0A06A)
+        val bronze = Color(0xFF75421F)
+        val panel = Color(0xFF1C1511)
+        val muted = Color(0xFFAA9380)
+        val line = Color(0xFF493326)
+
         val permission = if (Build.VERSION.SDK_INT >= 33) {
             Manifest.permission.READ_MEDIA_AUDIO
         } else {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
 
-        val permissionLauncher = rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { granted ->
-            hasPermission = granted
-            if (granted) songs = loadSongs()
-        }
+        val permissionLauncher =
+            rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                hasPermission = granted
+                if (granted) songs = loadSongs()
+            }
 
         LaunchedEffect(Unit) {
             hasPermission = ContextCompat.checkSelfPermission(
@@ -322,11 +335,6 @@ class MainActivity : ComponentActivity() {
                 currentFolder = parent.ifEmpty { null }
             }
         }
-
-        val black = Color(0xFF090706)
-        val copper = Color(0xFFB87333)
-        val lightCopper = Color(0xFFE0A06A)
-        val panel = Color(0xFF1C1511)
 
         val folderNames = remember(songs, currentFolder) {
             val prefix = currentFolder?.let { "$it/" } ?: ""
@@ -374,15 +382,24 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier
                         .fillMaxSize()
                         .background(black)
-                        .padding(16.dp)
+                        .padding(
+                            horizontal = 14.dp,
+                            vertical = 12.dp
+                        )
                 ) {
 
-                    // PERSONALIZED AFRICAN COPPER HEADER
+                    // AFRICAN COPPER HERO
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(190.dp)
-                            .clip(RoundedCornerShape(22.dp))
+                            .height(205.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(
+                                1.dp,
+                                copper.copy(alpha = 0.8f),
+                                RoundedCornerShape(24.dp)
+                            )
                     ) {
 
                         Image(
@@ -400,8 +417,9 @@ class MainActivity : ComponentActivity() {
                                 .background(
                                     Brush.verticalGradient(
                                         colors = listOf(
+                                            Color(0x33090706),
                                             Color.Transparent,
-                                            Color(0xDD090706)
+                                            Color(0xF5090706)
                                         )
                                     )
                                 )
@@ -409,89 +427,223 @@ class MainActivity : ComponentActivity() {
 
                         Column(
                             modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                "BANJUKA ARTS  •  PRESENTS",
+                                color = lightCopper,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 2.sp
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier
                                 .align(Alignment.BottomStart)
                                 .padding(18.dp)
                         ) {
-
                             Text(
                                 "KG",
                                 color = lightCopper,
-                                fontSize = 34.sp
+                                fontSize = 43.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 3.sp
                             )
 
                             Text(
-                                "AFRICAN SOUL • MUSIC PLAYER",
+                                "AFRICAN SOUL",
                                 color = Color.White,
-                                fontSize = 13.sp
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 3.sp
+                            )
+
+                            Spacer(Modifier.height(4.dp))
+
+                            Text(
+                                "YOUR SOUND. YOUR ROOTS. YOUR STORY.",
+                                color = lightCopper,
+                                fontSize = 9.sp,
+                                letterSpacing = 1.5.sp
+                            )
+                        }
+
+                        Text(
+                            "◇  ◆  ◇",
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(16.dp),
+                            color = lightCopper,
+                            fontSize = 16.sp
+                        )
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // AFRICAN GEOMETRIC ACCENT
+
+                    Text(
+                        "◆  ◇  ◆  ◇  ◆  ◇  ◆",
+                        modifier = Modifier.fillMaxWidth(),
+                        color = copper,
+                        fontSize = 12.sp,
+                        letterSpacing = 4.sp
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // BRAND AND SERVICE STATUS
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                "KG MUSIC PLAYER",
+                                color = lightCopper,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
+                            )
+
+                            Text(
+                                if (connected) {
+                                    "● SOUND ENGINE CONNECTED"
+                                } else {
+                                    "○ CONNECTING TO SOUND ENGINE..."
+                                },
+                                color = if (connected) copper else muted,
+                                fontSize = 9.sp,
+                                letterSpacing = 1.sp
+                            )
+                        }
+
+                        Text(
+                            "COPPER EDITION",
+                            color = muted,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // MAIN ACTIONS
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+
+                        OutlinedButton(
+                            onClick = { showEqualizer = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                copper
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = lightCopper
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text(
+                                "♫  SOUND ENGINE",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                playSongs(
+                                    songs,
+                                    0,
+                                    shuffle,
+                                    repeatAll
+                                )
+                            },
+                            enabled = connected && songs.isNotEmpty(),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = bronze
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text(
+                                "▶  PLAY ALL",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(15.dp))
 
-                    Text(
-                        "KG MUSIC PLAYER",
-                        color = copper,
-                        fontSize = 20.sp
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Text(
-                        if (connected) "PLAYBACK SERVICE CONNECTED"
-                        else "CONNECTING TO PLAYBACK SERVICE...",
-                        color = if (connected) lightCopper else Color.LightGray,
-                        fontSize = 11.sp
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-
-                    Button(
-                        onClick = { showEqualizer = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = copper
-                        )
-                    ) {
-                        Text("OPEN SOUND ENGINE • EQ")
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Button(
-                        onClick = {
-                            playSongs(songs, 0, shuffle, repeatAll)
-                        },
-                        enabled = connected && songs.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF75421F)
-                        )
-                    ) {
-                        Text("▶ PLAY ALL SONGS")
-                    }
-
-                    Spacer(Modifier.height(14.dp))
+                    // MUSIC LIBRARY HEADING
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "MY MUSIC",
-                            color = Color.White,
-                            fontSize = 18.sp
-                        )
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                "MY MUSIC",
+                                color = Color.White,
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
+                            )
 
-                        Text(
-                            "${songs.size} Songs",
-                            color = lightCopper
-                        )
+                            Text(
+                                "YOUR COLLECTION",
+                                color = muted,
+                                fontSize = 9.sp,
+                                letterSpacing = 2.sp
+                            )
+                        }
+
+                        Column(
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Text(
+                                "${songs.size}",
+                                color = lightCopper,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Text(
+                                "TRACKS",
+                                color = muted,
+                                fontSize = 9.sp,
+                                letterSpacing = 1.sp
+                            )
+                        }
                     }
 
-                    if (currentFolder != null) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 9.dp),
+                        color = line
+                    )
 
+                    // FOLDER NAVIGATION
+
+                    if (currentFolder != null) {
                         TextButton(
                             onClick = {
                                 val folder = currentFolder ?: ""
@@ -500,190 +652,321 @@ class MainActivity : ComponentActivity() {
                                     missingDelimiterValue = ""
                                 )
                                 currentFolder = parent.ifEmpty { null }
-                            }
+                            },
+                            contentPadding = PaddingValues(
+                                horizontal = 8.dp,
+                                vertical = 2.dp
+                            )
                         ) {
                             Text(
-                                "← Back • ${currentFolder?.substringAfterLast("/")}",
-                                color = lightCopper
+                                "← BACK TO PARENT",
+                                color = lightCopper,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
 
                         Text(
                             currentFolder ?: "",
-                            color = Color.Gray,
-                            fontSize = 11.sp
+                            color = muted,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(
+                                start = 8.dp,
+                                bottom = 6.dp
+                            )
                         )
                     }
 
-                    Spacer(Modifier.height(8.dp))
+                    // MUSIC CONTENT
 
-                    if (!hasPermission) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
 
-                        Button(
-                            onClick = {
-                                permissionLauncher.launch(permission)
-                            }
-                        ) {
-                            Text("ALLOW MUSIC ACCESS")
-                        }
+                        if (!hasPermission) {
 
-                    } else if (songs.isEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .align(Alignment.Center),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    "♫",
+                                    color = copper,
+                                    fontSize = 36.sp
+                                )
 
-                        Text(
-                            "No music found on your phone.",
-                            color = Color.LightGray
-                        )
+                                Spacer(Modifier.height(8.dp))
 
-                    } else {
+                                Text(
+                                    "LET THE MUSIC IN",
+                                    color = lightCopper,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 2.sp
+                                )
 
-                        LazyColumn(
-                            modifier = Modifier.weight(1f)
-                        ) {
+                                Spacer(Modifier.height(10.dp))
 
-                            items(
-                                folderNames,
-                                key = { "folder-$it" }
-                            ) { folder ->
-
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            currentFolder =
-                                                if (currentFolder == null) {
-                                                    folder
-                                                } else {
-                                                    "${currentFolder}/$folder"
-                                                }
-                                        }
-                                        .padding(vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Button(
+                                    onClick = {
+                                        permissionLauncher.launch(permission)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = bronze
+                                    )
                                 ) {
-
-                                    Icon(
-                                        Icons.Default.Folder,
-                                        contentDescription = "Folder",
-                                        tint = copper
-                                    )
-
-                                    Spacer(Modifier.width(12.dp))
-
-                                    Text(
-                                        folder,
-                                        color = Color.White,
-                                        modifier = Modifier.weight(1f)
-                                    )
-
-                                    Text(
-                                        "OPEN  ›",
-                                        color = lightCopper,
-                                        fontSize = 11.sp
-                                    )
+                                    Text("ALLOW MUSIC ACCESS")
                                 }
+                            }
 
-                                HorizontalDivider(
-                                    color = Color(0xFF493326)
+                        } else if (songs.isEmpty()) {
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .align(Alignment.Center),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    "♫",
+                                    color = copper,
+                                    fontSize = 36.sp
+                                )
+
+                                Text(
+                                    "NO MUSIC FOUND",
+                                    color = lightCopper,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 2.sp
+                                )
+
+                                Text(
+                                    "Add music to your phone to begin.",
+                                    color = muted,
+                                    fontSize = 11.sp
                                 )
                             }
 
-                            items(
-                                visibleSongs,
-                                key = { it.uri.toString() }
-                            ) { song ->
+                        } else {
 
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .combinedClickable(
-                                            onClick = {
-                                                val index =
-                                                    visibleSongs.indexOf(song)
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    bottom = 8.dp
+                                )
+                            ) {
 
-                                                playSongs(
-                                                    visibleSongs,
-                                                    index,
-                                                    shuffle,
-                                                    repeatAll
-                                                )
-                                            },
-                                            onLongClick = {
-                                                addToQueue(song)
-                                            }
-                                        )
-                                        .padding(vertical = 13.dp)
-                                ) {
+                                items(
+                                    folderNames,
+                                    key = { "folder-$it" }
+                                ) { folder ->
 
                                     Row(
-                                        verticalAlignment =
-                                            Alignment.CenterVertically
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(panel)
+                                            .clickable {
+                                                currentFolder =
+                                                    if (currentFolder == null) {
+                                                        folder
+                                                    } else {
+                                                        "${currentFolder}/$folder"
+                                                    }
+                                            }
+                                            .padding(
+                                                horizontal = 13.dp,
+                                                vertical = 13.dp
+                                            ),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
 
                                         Icon(
-                                            Icons.Default.MusicNote,
-                                            contentDescription = "Song",
-                                            tint = copper
+                                            Icons.Default.Folder,
+                                            contentDescription = "Folder",
+                                            tint = copper,
+                                            modifier = Modifier.size(23.dp)
                                         )
+
+                                        Spacer(Modifier.width(13.dp))
+
+                                        Text(
+                                            folder,
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.weight(1f)
+                                        )
+
+                                        Text(
+                                            "OPEN  ›",
+                                            color = lightCopper,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    Spacer(Modifier.height(5.dp))
+                                }
+
+                                items(
+                                    visibleSongs,
+                                    key = { it.uri.toString() }
+                                ) { song ->
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .combinedClickable(
+                                                onClick = {
+                                                    val index =
+                                                        visibleSongs.indexOf(song)
+
+                                                    playSongs(
+                                                        visibleSongs,
+                                                        index,
+                                                        shuffle,
+                                                        repeatAll
+                                                    )
+                                                },
+                                                onLongClick = {
+                                                    addToQueue(song)
+                                                }
+                                            )
+                                            .padding(
+                                                horizontal = 12.dp,
+                                                vertical = 11.dp
+                                            ),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(
+                                                    Color(0xFF302016)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.MusicNote,
+                                                contentDescription = "Song",
+                                                tint = lightCopper,
+                                                modifier = Modifier.size(21.dp)
+                                            )
+                                        }
 
                                         Spacer(Modifier.width(12.dp))
 
                                         Column(
                                             modifier = Modifier.weight(1f)
                                         ) {
-
                                             Text(
                                                 song.title,
-                                                color = Color.White
+                                                color = Color.White,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
+
+                                            Spacer(Modifier.height(3.dp))
 
                                             Text(
                                                 song.artist,
-                                                color = Color.LightGray,
-                                                fontSize = 12.sp
+                                                color = muted,
+                                                fontSize = 10.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                         }
-                                    }
-                                }
 
-                                HorizontalDivider(
-                                    color = Color(0xFF493326)
-                                )
+                                        Text(
+                                            "•••",
+                                            color = copper,
+                                            fontSize = 15.sp
+                                        )
+                                    }
+
+                                    HorizontalDivider(
+                                        color = line.copy(alpha = 0.55f)
+                                    )
+                                }
                             }
                         }
                     }
 
                     Spacer(Modifier.height(8.dp))
 
+                    // NOW PLAYING PANEL
+
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                1.dp,
+                                copper.copy(alpha = 0.65f),
+                                RoundedCornerShape(18.dp)
+                            ),
+                        shape = RoundedCornerShape(18.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = panel
                         )
                     ) {
 
                         Column(
-                            modifier = Modifier.padding(14.dp)
+                            modifier = Modifier.padding(
+                                horizontal = 13.dp,
+                                vertical = 11.dp
+                            )
                         ) {
 
-                            Text(
-                                "NOW PLAYING",
-                                color = lightCopper,
-                                fontSize = 11.sp
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "NOW PLAYING",
+                                    color = lightCopper,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 2.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
 
-                            Spacer(Modifier.height(4.dp))
+                                Text(
+                                    if (isPlaying) "● PLAYING" else "● READY",
+                                    color = if (isPlaying) copper else muted,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(Modifier.height(5.dp))
 
                             Text(
                                 currentSong,
                                 color = Color.White,
-                                fontSize = 16.sp
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
 
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(7.dp))
+
+                            HorizontalDivider(color = line)
+
+                            Spacer(Modifier.height(5.dp))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
 
@@ -692,11 +975,14 @@ class MainActivity : ComponentActivity() {
                                         shuffle = !shuffle
                                         mediaController?.shuffleModeEnabled =
                                             shuffle
-                                    }
+                                    },
+                                    contentPadding = PaddingValues(4.dp)
                                 ) {
                                     Text(
                                         if (shuffle) "SHUFFLE ON" else "SHUFFLE",
-                                        color = if (shuffle) lightCopper else Color.Gray
+                                        color = if (shuffle) lightCopper else muted,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
 
@@ -704,12 +990,13 @@ class MainActivity : ComponentActivity() {
                                     onClick = {
                                         mediaController?.seekToPrevious()
                                     },
-                                    enabled = connected
+                                    enabled = connected,
+                                    contentPadding = PaddingValues(4.dp)
                                 ) {
                                     Text(
                                         "⏮",
                                         color = lightCopper,
-                                        fontSize = 24.sp
+                                        fontSize = 21.sp
                                     )
                                 }
 
@@ -724,13 +1011,21 @@ class MainActivity : ComponentActivity() {
                                         }
                                     },
                                     enabled = connected,
+                                    modifier = Modifier.size(
+                                        width = 55.dp,
+                                        height = 42.dp
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = copper
-                                    )
+                                    ),
+                                    contentPadding = PaddingValues(0.dp)
                                 ) {
                                     Text(
                                         if (isPlaying) "Ⅱ" else "▶",
-                                        fontSize = 22.sp
+                                        color = Color.White,
+                                        fontSize = 21.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
 
@@ -738,12 +1033,13 @@ class MainActivity : ComponentActivity() {
                                     onClick = {
                                         mediaController?.seekToNext()
                                     },
-                                    enabled = connected
+                                    enabled = connected,
+                                    contentPadding = PaddingValues(4.dp)
                                 ) {
                                     Text(
                                         "⏭",
                                         color = lightCopper,
-                                        fontSize = 24.sp
+                                        fontSize = 21.sp
                                     )
                                 }
 
@@ -756,11 +1052,14 @@ class MainActivity : ComponentActivity() {
                                             } else {
                                                 Player.REPEAT_MODE_OFF
                                             }
-                                    }
+                                    },
+                                    contentPadding = PaddingValues(4.dp)
                                 ) {
                                     Text(
                                         if (repeatAll) "REPEAT ON" else "REPEAT",
-                                        color = if (repeatAll) lightCopper else Color.Gray
+                                        color = if (repeatAll) lightCopper else muted,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
