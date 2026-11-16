@@ -1,6 +1,7 @@
 
 package com.kgmusic.player
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -53,6 +54,30 @@ fun HomeScreen(
     var section by remember { mutableStateOf("Home") }
     var selectedFolder by remember { mutableStateOf<String?>(null) }
 
+    // Handle phone Back before allowing the activity to close.
+    BackHandler(
+        enabled = drawerOpen || menuOpen ||
+            searchOpen || section != "Home"
+    ) {
+        when {
+            menuOpen -> menuOpen = false
+
+            drawerOpen -> drawerOpen = false
+
+            section != "Home" -> {
+                section = "Home"
+                selectedFolder = null
+                searchText = ""
+                searchOpen = false
+            }
+
+            searchOpen -> {
+                searchOpen = false
+                searchText = ""
+            }
+        }
+    }
+
     val folders = remember(songs) {
         songs.map { it.folderPath }
             .filter { it.isNotBlank() }
@@ -67,11 +92,18 @@ fun HomeScreen(
             .sorted()
     }
 
-    val matchingSongs = remember(songs, searchText, section, selectedFolder) {
+    val matchingSongs = remember(
+        songs, searchText, section, selectedFolder
+    ) {
         val base = when (section) {
-            "Folder" -> songs.filter { it.folderPath == selectedFolder }
+            "Folder" -> songs.filter {
+                it.folderPath == selectedFolder
+            }
+
             "Artists" -> songs
+
             "Folders" -> emptyList()
+
             else -> songs
         }
 
@@ -101,19 +133,28 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(black)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Header
+        // HOME HEADER
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box {
                 TextButton(
-                    onClick = { drawerOpen = true },
+                    onClick = {
+                        drawerOpen = true
+                        menuOpen = false
+                    },
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
-                    Text("☰", color = lightCopper, fontSize = 25.sp)
+                    Text(
+                        "☰",
+                        color = lightCopper,
+                        fontSize = 25.sp
+                    )
                 }
 
                 DropdownMenu(
@@ -133,6 +174,7 @@ fun HomeScreen(
                             vertical = 12.dp
                         )
                     )
+
                     HorizontalDivider(color = line)
 
                     listOf(
@@ -168,6 +210,7 @@ fun HomeScreen(
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 2.sp
                 )
+
                 Text(
                     "BANJUKA ARTS",
                     color = muted,
@@ -183,15 +226,26 @@ fun HomeScreen(
                 },
                 contentPadding = PaddingValues(6.dp)
             ) {
-                Text("⌕", color = lightCopper, fontSize = 27.sp)
+                Text(
+                    "⌕",
+                    color = lightCopper,
+                    fontSize = 27.sp
+                )
             }
 
             Box {
                 TextButton(
-                    onClick = { menuOpen = true },
+                    onClick = {
+                        menuOpen = true
+                        drawerOpen = false
+                    },
                     contentPadding = PaddingValues(6.dp)
                 ) {
-                    Text("⋮", color = lightCopper, fontSize = 27.sp)
+                    Text(
+                        "⋮",
+                        color = lightCopper,
+                        fontSize = 27.sp
+                    )
                 }
 
                 DropdownMenu(
@@ -203,15 +257,19 @@ fun HomeScreen(
                         menuOpen = false
                         onPlayAll()
                     }
+
                     menuEntry("Shuffle") {
                         menuOpen = false
                         onShuffle()
                     }
+
                     menuEntry("Equalizer") {
                         menuOpen = false
                         onOpenEqualizer()
                     }
+
                     HorizontalDivider(color = line)
+
                     menuEntry("Exit") {
                         menuOpen = false
                         onExit()
@@ -220,15 +278,20 @@ fun HomeScreen(
             }
         }
 
+        // SEARCH
         if (searchOpen) {
             Spacer(Modifier.height(10.dp))
+
             OutlinedTextField(
                 value = searchText,
                 onValueChange = { searchText = it },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 placeholder = {
-                    Text("Search your music", color = muted)
+                    Text(
+                        "Search your music",
+                        color = muted
+                    )
                 },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
@@ -240,9 +303,8 @@ fun HomeScreen(
             )
         }
 
+        // HOME OR SELECTED SECTION
         if (section == "Home") {
-            // Intentionally open space reserved for the future
-            // sunset and acacia-tree photograph.
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -280,7 +342,11 @@ fun HomeScreen(
                         searchOpen = false
                     }
                 ) {
-                    Text("CLOSE  ×", color = copper, fontSize = 11.sp)
+                    Text(
+                        "CLOSE  ×",
+                        color = copper,
+                        fontSize = 11.sp
+                    )
                 }
             }
 
@@ -319,16 +385,28 @@ fun HomeScreen(
                                     .padding(vertical = 15.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("▣", color = copper, fontSize = 21.sp)
+                                Text(
+                                    "▣",
+                                    color = copper,
+                                    fontSize = 21.sp
+                                )
+
                                 Spacer(Modifier.width(14.dp))
+
                                 Text(
                                     folder.substringAfterLast('/'),
                                     color = Color.White,
                                     fontSize = 14.sp,
                                     modifier = Modifier.weight(1f)
                                 )
-                                Text("›", color = lightCopper, fontSize = 22.sp)
+
+                                Text(
+                                    "›",
+                                    color = lightCopper,
+                                    fontSize = 22.sp
+                                )
                             }
+
                             HorizontalDivider(color = line)
                         }
                     }
@@ -341,7 +419,10 @@ fun HomeScreen(
                     ) {
                         items(
                             artists.filter {
-                                it.contains(searchText, ignoreCase = true)
+                                it.contains(
+                                    searchText,
+                                    ignoreCase = true
+                                )
                             }
                         ) { artist ->
                             Column(
@@ -358,12 +439,14 @@ fun HomeScreen(
                                     color = Color.White,
                                     fontSize = 14.sp
                                 )
+
                                 Text(
                                     "VIEW ARTIST SONGS  ›",
                                     color = muted,
                                     fontSize = 9.sp
                                 )
                             }
+
                             HorizontalDivider(color = line)
                         }
                     }
@@ -381,18 +464,28 @@ fun HomeScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onPlaySong(song) }
+                                    .clickable {
+                                        onPlaySong(song)
+                                    }
                                     .padding(vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .size(40.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(Color(0xFF302016)),
+                                        .clip(
+                                            RoundedCornerShape(10.dp)
+                                        )
+                                        .background(
+                                            Color(0xFF302016)
+                                        ),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("♫", color = lightCopper, fontSize = 21.sp)
+                                    Text(
+                                        "♫",
+                                        color = lightCopper,
+                                        fontSize = 21.sp
+                                    )
                                 }
 
                                 Spacer(Modifier.width(12.dp))
@@ -408,6 +501,7 @@ fun HomeScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+
                                     Text(
                                         song.artist,
                                         color = muted,
@@ -416,8 +510,14 @@ fun HomeScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                Text("▶", color = copper, fontSize = 13.sp)
+
+                                Text(
+                                    "▶",
+                                    color = copper,
+                                    fontSize = 13.sp
+                                )
                             }
+
                             HorizontalDivider(color = line)
                         }
                     }
@@ -425,13 +525,17 @@ fun HomeScreen(
             }
         }
 
-        // Persistent mini-player
+        // PERSISTENT MINI-PLAYER
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onOpenQueue() },
+                .clickable {
+                    onOpenQueue()
+                },
             shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = panel)
+            colors = CardDefaults.cardColors(
+                containerColor = panel
+            )
         ) {
             Column(
                 modifier = Modifier.padding(
@@ -453,6 +557,7 @@ fun HomeScreen(
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 2.sp
                         )
+
                         Text(
                             currentSong,
                             color = Color.White,
@@ -462,6 +567,7 @@ fun HomeScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+
                     Text(
                         if (isPlaying) "● PLAYING" else "● READY",
                         color = if (isPlaying) copper else muted,
@@ -490,7 +596,11 @@ fun HomeScreen(
                         onClick = onPrevious,
                         enabled = connected
                     ) {
-                        Text("⏮", color = lightCopper, fontSize = 19.sp)
+                        Text(
+                            "⏮",
+                            color = lightCopper,
+                            fontSize = 19.sp
+                        )
                     }
 
                     Button(
@@ -516,7 +626,11 @@ fun HomeScreen(
                         onClick = onNext,
                         enabled = connected
                     ) {
-                        Text("⏭", color = lightCopper, fontSize = 19.sp)
+                        Text(
+                            "⏭",
+                            color = lightCopper,
+                            fontSize = 19.sp
+                        )
                     }
 
                     TextButton(onClick = onRepeat) {
