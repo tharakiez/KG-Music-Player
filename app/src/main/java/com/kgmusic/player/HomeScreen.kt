@@ -1,10 +1,8 @@
-
 package com.kgmusic.player
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -46,7 +44,6 @@ fun HomeScreen(
     val black = Color(0xFF090706)
     val copper = Color(0xFFB87333)
     val lightCopper = Color(0xFFE0A06A)
-    val bronze = Color(0xFF75421F)
     val gold = Color(0xFFD6A84B)
     val panel = Color(0xFF1C1511)
     val muted = Color(0xFFAA9380)
@@ -414,114 +411,24 @@ fun HomeScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(top = 12.dp, bottom = 10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(top = 12.dp, bottom = 10.dp)
             ) {
-                Text(
-                    "✦  FEEL THE RHYTHM  ✦",
-                    color = gold,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 3.sp
-                )
-
-                Text(
-                    "ROOTED IN AFRICA • MADE FOR THE SOUL",
-                    color = muted,
-                    fontSize = 8.sp,
-                    letterSpacing = 1.5.sp
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                // LARGE CENTRAL PORTRAIT PANEL
-                Column(
+                Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(panel)
-                        .border(
-                            width = 2.dp,
-                            color = copper,
-                            shape = RoundedCornerShape(22.dp)
-                        )
-                        .padding(9.dp)
-                        .border(
-                            width = 1.dp,
-                            color = gold,
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        .padding(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .clip(RoundedCornerShape(18.dp))
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 5.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("◆", color = copper, fontSize = 12.sp)
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            "BANJUKA ARTS",
-                            color = gold,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 3.sp
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text("◆", color = copper, fontSize = 12.sp)
-                    }
-
-                    // Original portrait: displayed without cropping.
                     Image(
-                        painter = painterResource(id = R.drawable.kg_portrait),
-                        contentDescription = "KG Music African portrait",
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(black)
-                            .border(
-                                width = 1.dp,
-                                color = bronze,
-                                shape = RoundedCornerShape(12.dp)
-                            ),
-                        contentScale = ContentScale.Fit
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Text(
-                        "THE SOUND OF OUR ROOTS",
-                        color = lightCopper,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
-                    )
-
-                    Text(
-                        "AFRICAN SOUL • TIMELESS RHYTHM",
-                        color = muted,
-                        fontSize = 8.sp,
-                        letterSpacing = 1.5.sp
-                    )
-
-                    Spacer(Modifier.height(5.dp))
-
-                    Text(
-                        "◇  ◆  ◇  ◆  ◇",
-                        color = copper,
-                        fontSize = 13.sp,
-                        letterSpacing = 4.sp
+                        painter = painterResource(id = R.drawable.african_sunset_acacia),
+                        contentDescription = "African sunset with acacia trees and African music artwork",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
                     )
                 }
 
                 Spacer(Modifier.height(12.dp))
 
-                // HOME ACTION BUTTONS
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -547,9 +454,7 @@ fun HomeScreen(
                         onClick = onOpenEqualizer,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(gold)
-                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, gold),
                         contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
                         Text(
