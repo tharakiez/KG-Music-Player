@@ -1,6 +1,9 @@
 
 package com.kgmusic.player
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,9 +38,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.session.MediaController
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToLong
 
 private val KGBlack = Color(0xFF090706)
@@ -72,6 +79,43 @@ fun NowPlayingScreen(
     var sleepJob by remember { mutableStateOf<Job?>(null) }
 
     val scope = rememberCoroutineScope()
+
+    // SONG ARTWORK
+    val context = LocalContext.current
+    val currentTrackUri = queue.getOrNull(currentQueueIndex)?.uri
+
+    var albumArtBitmap by remember(currentTrackUri) {
+        mutableStateOf<Bitmap?>(null)
+    }
+
+    LaunchedEffect(currentTrackUri) {
+        albumArtBitmap = withContext(Dispatchers.IO) {
+            if (currentTrackUri == null) {
+                null
+            } else {
+                val retriever = MediaMetadataRetriever()
+
+                try {
+                    retriever.setDataSource(context, currentTrackUri)
+
+                    retriever.embeddedPicture?.let { bytes ->
+                        BitmapFactory.decodeByteArray(
+                            bytes,
+                            0,
+                            bytes.size
+                        )
+                    }
+                } catch (_: Exception) {
+                    null
+                } finally {
+                    try {
+                        retriever.release()
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        }
+    }
 
     LaunchedEffect(controller) {
         while (true) {
@@ -214,22 +258,34 @@ fun NowPlayingScreen(
 
                 Spacer(Modifier.height(10.dp))
 
-                Image(
-                    painter = painterResource(
-                        id = R.drawable.kg_portrait
-                    ),
-                    contentDescription = "KG Music artwork",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(18.dp))
-                        .border(
-                            1.dp,
-                            KGCopper,
-                            RoundedCornerShape(18.dp)
+                // USE SONG COVER OR AFRICAN SUNSET FALLBACK
+                val artworkModifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .border(
+                        1.dp,
+                        KGCopper,
+                        RoundedCornerShape(18.dp)
+                    )
+
+                if (albumArtBitmap != null) {
+                    Image(
+                        bitmap = albumArtBitmap!!.asImageBitmap(),
+                        contentDescription = "Song album artwork",
+                        modifier = artworkModifier,
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(
+                            id = R.drawable.african_sunset_acacia
                         ),
-                    contentScale = ContentScale.Crop
-                )
+                        contentDescription = "African sunset KG Music artwork",
+                        modifier = artworkModifier,
+                        contentScale = ContentScale.Crop
+                    )
+                }
 
                 Spacer(Modifier.height(12.dp))
 
