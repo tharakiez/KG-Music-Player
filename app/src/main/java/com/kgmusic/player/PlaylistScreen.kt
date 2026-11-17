@@ -1,725 +1,831 @@
 
 package com.kgmusic.player
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.media.MediaMetadataRetriever
-import androidx.compose.foundation.Image
+import android.net.Uri
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Equalizer
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.RepeatOne
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.layout.ContentScale
-import androidx.media3.common.C
-import androidx.media3.common.PlaybackParameters
-import androidx.media3.session.MediaController
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlin.math.roundToLong
-
-private val KGBlack = Color(0xFF090706)
-private val KGCopper = Color(0xFFB87333)
-private val KGLightGold = Color(0xFFE0B16D)
-private val KGPanel = Color(0xFF1C1511)
-private val KGMuted = Color(0xFFAA9380)
 
 @Composable
-fun NowPlayingScreen(
-    currentSong: String,
-    isPlaying: Boolean,
-    connected: Boolean,
-    queue: List<QueueTrack>,
-    currentQueueIndex: Int,
-    shuffle: Boolean,
-    repeatMode: Int,
-    controller: MediaController?,
+fun PlaylistScreen(
+    songs: List<Song>,
     onBack: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenPlaylists: () -> Unit,
-    onShuffleChange: (Boolean) -> Unit,
-    onRepeatChange: (Int) -> Unit,
-    onSelectQueueItem: (Int) -> Unit
+    onPlayPlaylist: (List<Song>) -> Unit
 ) {
-    var position by remember { mutableLongStateOf(0L) }
-    var duration by remember { mutableLongStateOf(0L) }
-    var speed by remember { mutableFloatStateOf(1f) }
-    var dragging by remember { mutableStateOf(false) }
-    var sliderPosition by remember { mutableFloatStateOf(0f) }
-
-    var showSleepDialog by remember { mutableStateOf(false) }
-    var sleepLabel by remember { mutableStateOf("Sleep timer") }
-    var sleepJob by remember { mutableStateOf<Job?>(null) }
-
-    val scope = rememberCoroutineScope()
-
-    // LOAD EMBEDDED SONG ARTWORK.
-    // USE AFRICAN SUNSET ARTWORK WHEN A SONG HAS NO COVER.
     val context = LocalContext.current
-    val currentTrackUri = queue.getOrNull(currentQueueIndex)?.uri
 
-    var albumArtBitmap by remember(currentTrackUri) {
-        mutableStateOf<Bitmap?>(null)
+    val black = Color(0xFF090706)
+    val copper = Color(0xFFB87333)
+    val lightCopper = Color(0xFFE0A06A)
+    val panel = Color(0xFF1C1511)
+    val muted = Color(0xFFAA9380)
+    val line = Color(0xFF493326)
+
+    var playlists by remember {
+        mutableStateOf(PlaylistStorage.load(context))
     }
 
-    LaunchedEffect(currentTrackUri) {
-        albumArtBitmap = withContext(Dispatchers.IO) {
-            if (currentTrackUri == null) {
+    var selectedPlaylistName by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var showCreateDialog by remember {
+        mutableStateOf(false)
+    }
+
+    var showAddDialog by remember {
+        mutableStateOf(false)
+    }
+
+    var showFolderPrompt by remember {
+        mutableStateOf(false)
+    }
+
+    var newPlaylistName by remember {
+        mutableStateOf("")
+    }
+
+    var selectedUris by remember {
+        mutableStateOf(setOf<String>())
+    }
+
+    var browseFolder by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var pendingFolder by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    fun refreshPlaylists() {
+        playlists = PlaylistStorage.load(context)
+    }
+
+    fun cleanPath(path: String): String {
+        return path.trim('/')
+    }
+
+    fun folderName(path: String): String {
+        return cleanPath(path).substringAfterLast('/')
+    }
+
+    fun childFolders(path: String): List<String> {
+        val parent = cleanPath(path)
+
+        return songs.mapNotNull { song ->
+            val clean = cleanPath(song.folderPath)
+
+            if (clean.isBlank() || clean == parent) {
                 null
             } else {
-                val retriever = MediaMetadataRetriever()
+                val belongs = if (parent.isBlank()) {
+                    true
+                } else {
+                    clean.startsWith("$parent/")
+                }
 
-                try {
-                    retriever.setDataSource(context, currentTrackUri)
-
-                    retriever.embeddedPicture?.let { artwork ->
-                        BitmapFactory.decodeByteArray(
-                            artwork,
-                            0,
-                            artwork.size
-                        )
-                    }
-                } catch (_: Exception) {
+                if (!belongs) {
                     null
-                } finally {
-                    try {
-                        retriever.release()
-                    } catch (_: Exception) {
+                } else {
+                    val remainder = if (parent.isBlank()) {
+                        clean
+                    } else {
+                        clean.removePrefix("$parent/")
+                    }
+
+                    val child = remainder.substringBefore('/')
+
+                    if (child.isBlank()) {
+                        null
+                    } else if (parent.isBlank()) {
+                        child
+                    } else {
+                        "$parent/$child"
                     }
                 }
             }
-        }
+        }.distinct().sortedBy { it.lowercase() }
     }
 
-    LaunchedEffect(controller) {
-        while (true) {
-            controller?.let {
-                val actualDuration = it.duration
+    fun directSongs(path: String): List<Song> {
+        val clean = cleanPath(path)
 
-                if (actualDuration > 0L &&
-                    actualDuration != C.TIME_UNSET
-                ) {
-                    duration = actualDuration
-                }
+        return songs.filter {
+            cleanPath(it.folderPath) == clean
+        }.sortedBy { it.title.lowercase() }
+    }
 
-                if (!dragging) {
-                    position = it.currentPosition.coerceAtLeast(0L)
-                    sliderPosition = position.toFloat()
-                }
+    fun songsInFolder(
+        path: String,
+        includeSubfolders: Boolean
+    ): List<Song> {
+        val clean = cleanPath(path)
 
-                speed = it.playbackParameters.speed
+        return songs.filter { song ->
+            val songPath = cleanPath(song.folderPath)
+
+            if (includeSubfolders) {
+                songPath == clean || songPath.startsWith("$clean/")
+            } else {
+                songPath == clean
             }
-
-            delay(400)
-        }
-    }
-
-    fun formatTime(milliseconds: Long): String {
-        val totalSeconds = (milliseconds / 1000L).coerceAtLeast(0L)
-        val minutes = totalSeconds / 60L
-        val seconds = totalSeconds % 60L
-        return "%d:%02d".format(minutes, seconds)
-    }
-
-    fun setTempo(newSpeed: Float) {
-        val nextSpeed = if (speed == newSpeed) {
-            1.0f
-        } else {
-            newSpeed
-        }
-
-        speed = nextSpeed
-
-        controller?.setPlaybackParameters(
-            PlaybackParameters(nextSpeed, 1f)
+        }.sortedWith(
+            compareBy<Song>(
+                { cleanPath(it.folderPath).lowercase() },
+                { it.title.lowercase() }
+            )
         )
+    }
+
+    fun saveSongsToPlaylist(
+        playlistName: String,
+        songsToAdd: List<Song>
+    ) {
+        songsToAdd.forEach { song ->
+            PlaylistStorage.addSong(
+                context,
+                playlistName,
+                SavedPlaylistSong(
+                    title = song.title,
+                    artist = song.artist,
+                    uri = song.uri.toString(),
+                    folderPath = song.folderPath
+                )
+            )
+        }
+
+        refreshPlaylists()
+    }
+
+    fun addFolderToPlaylist(
+        folder: String,
+        includeSubfolders: Boolean
+    ) {
+        val playlistName = selectedPlaylistName ?: return
+
+        val folderSongs = songsInFolder(
+            folder,
+            includeSubfolders
+        )
+
+        saveSongsToPlaylist(playlistName, folderSongs)
+        pendingFolder = null
+        showFolderPrompt = false
+    }
+
+    fun requestAddFolder(folder: String) {
+        if (childFolders(folder).isNotEmpty()) {
+            pendingFolder = folder
+            showFolderPrompt = true
+        } else {
+            addFolderToPlaylist(folder, false)
+        }
+    }
+
+    val selectedPlaylist = playlists.firstOrNull {
+        it.name == selectedPlaylistName
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(KGBlack)
+            .background(black)
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .padding(16.dp)
     ) {
-
-        // TOP BAR
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = KGLightGold
+            TextButton(
+                onClick = {
+                    if (selectedPlaylistName != null) {
+                        selectedPlaylistName = null
+                    } else {
+                        onBack()
+                    }
+                }
+            ) {
+                Text(
+                    "‹ BACK",
+                    color = lightCopper,
+                    fontSize = 12.sp
                 )
             }
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
                     "KG MUSIC",
-                    color = KGLightGold,
+                    color = lightCopper,
                     fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 2.sp
                 )
 
                 Text(
-                    "AFRICAN RHYTHM",
-                    color = KGMuted,
+                    "PLAYLISTS",
+                    color = muted,
                     fontSize = 9.sp,
                     letterSpacing = 2.sp
                 )
             }
 
-            IconButton(onClick = onOpenSettings) {
-                Icon(
-                    Icons.Default.Equalizer,
-                    contentDescription = "Settings",
-                    tint = KGLightGold
-                )
-            }
-
-            IconButton(onClick = onOpenPlaylists) {
-                Icon(
-                    Icons.Default.PlaylistPlay,
-                    contentDescription = "Playlists",
-                    tint = KGLightGold
-                )
-            }
-
-            IconButton(onClick = { showSleepDialog = true }) {
-                Icon(
-                    Icons.Default.Timer,
-                    contentDescription = "Sleep timer",
-                    tint = KGLightGold
-                )
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        // MAIN PLAYER CARD
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = KGPanel
-            ),
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                KGCopper.copy(alpha = 0.75f)
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-
-                Text(
-                    "BANJUKA ARTS",
-                    color = KGLightGold,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 3.sp
-                )
-
-                Spacer(Modifier.height(10.dp))
-
-                // SONG ARTWORK OR AFRICAN SUNSET FALLBACK
-                val artworkModifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(18.dp))
-                    .border(
-                        1.dp,
-                        KGCopper,
-                        RoundedCornerShape(18.dp)
-                    )
-
-                if (albumArtBitmap != null) {
-                    Image(
-                        bitmap = albumArtBitmap!!.asImageBitmap(),
-                        contentDescription = "Song album artwork",
-                        modifier = artworkModifier,
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Image(
-                        painter = painterResource(
-                            id = R.drawable.african_sunset_acacia
-                        ),
-                        contentDescription = "African sunset KG Music artwork",
-                        modifier = artworkModifier,
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                Text(
-                    currentSong,
-                    color = Color.White,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                    queue.getOrNull(currentQueueIndex)?.artist
-                        ?: "Unknown artist",
-                    color = KGMuted,
-                    fontSize = 12.sp,
-                    maxLines = 1
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                // SEEK BAR
-                Slider(
-                    value = sliderPosition.coerceIn(
-                        0f,
-                        duration.coerceAtLeast(1L).toFloat()
-                    ),
-                    onValueChange = {
-                        dragging = true
-                        sliderPosition = it
-                    },
-                    onValueChangeFinished = {
-                        controller?.seekTo(
-                            sliderPosition.roundToLong()
-                        )
-
-                        position = sliderPosition.roundToLong()
-                        dragging = false
-                    },
-                    valueRange = 0f..duration.coerceAtLeast(1L).toFloat(),
-                    enabled = connected && duration > 0L,
-                    colors = SliderDefaults.colors(
-                        thumbColor = KGLightGold,
-                        activeTrackColor = KGCopper,
-                        inactiveTrackColor = KGMuted
-                    )
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+            if (selectedPlaylistName == null) {
+                TextButton(
+                    onClick = {
+                        newPlaylistName = ""
+                        showCreateDialog = true
+                    }
                 ) {
                     Text(
-                        formatTime(position),
-                        color = KGMuted,
-                        fontSize = 10.sp
-                    )
-
-                    Text(
-                        formatTime(duration),
-                        color = KGMuted,
-                        fontSize = 10.sp
-                    )
-                }
-
-                Spacer(Modifier.height(6.dp))
-
-                // TEMPO AND 10-SECOND SEEK CONTROLS
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(
-                        onClick = {
-                            controller?.let {
-                                it.seekTo(
-                                    (it.currentPosition - 10_000L)
-                                        .coerceAtLeast(0L)
-                                )
-                            }
-                        },
-                        enabled = connected
-                    ) {
-                        Text(
-                            "−10",
-                            color = KGLightGold,
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    TextButton(
-                        onClick = { setTempo(0.8f) },
-                        enabled = connected
-                    ) {
-                        Text(
-                            "80%",
-                            color = if (speed == 0.8f) {
-                                KGLightGold
-                            } else {
-                                KGMuted
-                            },
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Text(
-                        "${(speed * 100).toInt()}%",
-                        color = KGLightGold,
-                        fontSize = 15.sp,
+                        "+ CREATE",
+                        color = copper,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
+                }
+            }
+        }
 
-                    TextButton(
-                        onClick = { setTempo(1.2f) },
-                        enabled = connected
+        Spacer(Modifier.height(18.dp))
+        HorizontalDivider(color = line)
+        Spacer(Modifier.height(12.dp))
+
+        if (selectedPlaylistName == null) {
+            if (playlists.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            "120%",
-                            color = if (speed == 1.2f) {
-                                KGLightGold
-                            } else {
-                                KGMuted
-                            },
-                            fontSize = 13.sp,
+                            "♫",
+                            color = copper,
+                            fontSize = 38.sp
+                        )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        Text(
+                            "No playlists yet",
+                            color = lightCopper,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
-                    }
 
-                    TextButton(
-                        onClick = {
-                            controller?.let {
-                                it.seekTo(
-                                    (it.currentPosition + 10_000L)
-                                        .coerceAtMost(duration)
-                                )
-                            }
-                        },
-                        enabled = connected
-                    ) {
                         Text(
-                            "+10",
-                            color = KGLightGold,
+                            "Create a playlist to begin",
+                            color = muted,
                             fontSize = 12.sp
                         )
                     }
                 }
-
-                Spacer(Modifier.height(4.dp))
-
-                // MAIN PLAYBACK CONTROLS
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(bottom = 12.dp)
                 ) {
-                    IconButton(
-                        onClick = {
-                            onShuffleChange(!shuffle)
-                        }
-                    ) {
-                        Icon(
-                            Icons.Default.Shuffle,
-                            contentDescription = "Shuffle",
-                            tint = if (shuffle) KGLightGold else KGMuted
-                        )
-                    }
-
-                    IconButton(
-                        onClick = {
-                            controller?.seekToPrevious()
-                        },
-                        enabled = connected
-                    ) {
-                        Text(
-                            "⏮",
-                            color = KGLightGold,
-                            fontSize = 23.sp
-                        )
-                    }
-
-                    Button(
-                        onClick = {
-                            controller?.let {
-                                if (it.isPlaying) {
-                                    it.pause()
-                                } else {
-                                    it.play()
+                    items(
+                        playlists,
+                        key = { it.name }
+                    ) { playlist ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedPlaylistName = playlist.name
                                 }
+                                .padding(vertical = 15.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .background(
+                                        Color(0xFF302016),
+                                        RoundedCornerShape(12.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "♫",
+                                    color = lightCopper,
+                                    fontSize = 23.sp
+                                )
                             }
-                        },
-                        enabled = connected,
-                        modifier = Modifier.size(
-                            width = 66.dp,
-                            height = 50.dp
-                        ),
-                        shape = RoundedCornerShape(15.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = KGCopper
-                        )
-                    ) {
-                        Text(
-                            if (isPlaying) "Ⅱ" else "▶",
-                            color = Color.White,
-                            fontSize = 23.sp
-                        )
-                    }
 
-                    IconButton(
-                        onClick = {
-                            controller?.seekToNext()
-                        },
-                        enabled = connected
-                    ) {
-                        Text(
-                            "⏭",
-                            color = KGLightGold,
-                            fontSize = 23.sp
-                        )
-                    }
+                            Spacer(Modifier.width(14.dp))
 
-                    IconButton(
-                        onClick = {
-                            onRepeatChange((repeatMode + 1) % 3)
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    playlist.name,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Text(
+                                    "${playlist.songs.size} songs",
+                                    color = muted,
+                                    fontSize = 10.sp
+                                )
+                            }
+
+                            Text(
+                                "›",
+                                color = copper,
+                                fontSize = 24.sp
+                            )
                         }
-                    ) {
-                        Icon(
-                            if (repeatMode == 2) {
-                                Icons.Default.RepeatOne
-                            } else {
-                                Icons.Default.Repeat
-                            },
-                            contentDescription = "Repeat",
-                            tint = if (repeatMode == 0) {
-                                KGMuted
-                            } else {
-                                KGLightGold
-                            }
-                        )
+
+                        HorizontalDivider(color = line)
                     }
                 }
-
-                Text(
-                    when (repeatMode) {
-                        1 -> "REPEAT PLAYLIST"
-                        2 -> "REPEAT ONE"
-                        else -> "REPEAT OFF"
-                    },
-                    color = KGMuted,
-                    fontSize = 9.sp,
-                    letterSpacing = 2.sp
-                )
-
-                Text(
-                    sleepLabel,
-                    color = KGLightGold,
-                    fontSize = 10.sp
-                )
             }
-        }
+        } else {
+            val playlist = selectedPlaylist
 
-        Spacer(Modifier.height(12.dp))
-
-        // PLAYING QUEUE
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "PLAYING QUEUE",
-                color = KGLightGold,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp,
-                modifier = Modifier.weight(1f)
-            )
-
-            Text(
-                "${queue.size} TRACKS",
-                color = KGMuted,
-                fontSize = 10.sp
-            )
-        }
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 150.dp),
-            contentPadding = PaddingValues(vertical = 6.dp)
-        ) {
-            itemsIndexed(
-                queue,
-                key = { index, track -> "$index-${track.uri}" }
-            ) { index, track ->
-
-                val current = index == currentQueueIndex
-
+            if (playlist != null) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (current) {
-                                Color(0xFF302016)
-                            } else {
-                                Color.Transparent
-                            }
-                        )
-                        .clickable {
-                            onSelectQueueItem(index)
-                        }
-                        .padding(
-                            horizontal = 10.dp,
-                            vertical = 9.dp
-                        ),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Default.MusicNote,
-                        contentDescription = null,
-                        tint = if (current) {
-                            KGLightGold
-                        } else {
-                            KGCopper
-                        }
-                    )
-
-                    Spacer(Modifier.width(10.dp))
-
                     Column(
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                            track.title,
-                            color = if (current) {
-                                KGLightGold
-                            } else {
-                                Color.White
-                            },
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            playlist.name,
+                            color = lightCopper,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
                         )
 
                         Text(
-                            track.artist,
-                            color = KGMuted,
-                            fontSize = 10.sp,
-                            maxLines = 1
+                            "${playlist.songs.size} songs",
+                            color = muted,
+                            fontSize = 11.sp
                         )
                     }
 
-                    if (current) {
+                    TextButton(
+                        onClick = {
+                            showAddDialog = true
+                            browseFolder = null
+                            selectedUris = emptySet()
+                        }
+                    ) {
                         Text(
-                            "PLAYING",
-                            color = KGLightGold,
-                            fontSize = 9.sp
+                            "+ ADD",
+                            color = copper,
+                            fontWeight = FontWeight.Bold
                         )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val playable = playlist.songs.mapNotNull { saved ->
+                                songs.firstOrNull {
+                                    it.uri.toString() == saved.uri
+                                }
+                            }
+
+                            if (playable.isNotEmpty()) {
+                                onPlayPlaylist(playable)
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = copper
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("▶ PLAY")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            PlaylistStorage.deletePlaylist(
+                                context,
+                                playlist.name
+                            )
+                            selectedPlaylistName = null
+                            refreshPlaylists()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = lightCopper
+                        ),
+                        border = ButtonDefaults.outlinedButtonBorder
+                    ) {
+                        Text("DELETE")
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = line)
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(bottom = 12.dp)
+                ) {
+                    items(
+                        playlist.songs,
+                        key = { it.uri }
+                    ) { savedSong ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    savedSong.title,
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                if (savedSong.artist.isNotBlank()) {
+                                    Text(
+                                        savedSong.artist,
+                                        color = muted,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            TextButton(
+                                onClick = {
+                                    PlaylistStorage.removeSong(
+                                        context,
+                                        playlist.name,
+                                        savedSong.uri
+                                    )
+                                    refreshPlaylists()
+                                }
+                            ) {
+                                Text(
+                                    "REMOVE",
+                                    color = copper,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(color = line)
                     }
                 }
             }
         }
     }
 
-    // SLEEP TIMER
-    if (showSleepDialog) {
+    if (showCreateDialog) {
         AlertDialog(
             onDismissRequest = {
-                showSleepDialog = false
+                showCreateDialog = false
             },
-            containerColor = KGPanel,
+            containerColor = panel,
             title = {
                 Text(
-                    "SLEEP TIMER",
-                    color = KGLightGold
+                    "Create playlist",
+                    color = lightCopper
                 )
             },
             text = {
+                OutlinedTextField(
+                    value = newPlaylistName,
+                    onValueChange = {
+                        newPlaylistName = it
+                    },
+                    singleLine = true,
+                    placeholder = {
+                        Text(
+                            "Playlist name",
+                            color = muted
+                        )
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = copper,
+                        unfocusedBorderColor = line,
+                        cursorColor = lightCopper
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = newPlaylistName.trim()
+
+                        if (name.isNotBlank()) {
+                            val created = PlaylistStorage.createPlaylist(
+                                context,
+                                name
+                            )
+
+                            if (created) {
+                                refreshPlaylists()
+                                selectedPlaylistName = name
+                            }
+                        }
+
+                        showCreateDialog = false
+                    }
+                ) {
+                    Text("CREATE", color = lightCopper)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showCreateDialog = false
+                    }
+                ) {
+                    Text("CANCEL", color = muted)
+                }
+            }
+        )
+    }
+
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showAddDialog = false
+                browseFolder = null
+                selectedUris = emptySet()
+            },
+            containerColor = panel,
+            title = {
                 Column {
                     Text(
-                        "Pause music after:",
-                        color = Color.White
+                        "Add songs",
+                        color = lightCopper,
+                        fontWeight = FontWeight.Bold
                     )
 
-                    listOf(15, 30, 45, 60).forEach { minutes ->
+                    Text(
+                        if (browseFolder == null) {
+                            "Choose a folder or individual songs"
+                        } else {
+                            folderName(browseFolder!!)
+                        },
+                        color = muted,
+                        fontSize = 11.sp
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.heightIn(max = 420.dp)
+                ) {
+                    if (browseFolder != null) {
                         TextButton(
                             onClick = {
-                                sleepJob?.cancel()
-                                sleepLabel = "Sleep in $minutes min"
+                                val current = cleanPath(browseFolder!!)
+                                val parent = current.substringBeforeLast(
+                                    "/",
+                                    missingDelimiterValue = ""
+                                )
 
-                                sleepJob = scope.launch {
-                                    delay(minutes * 60_000L)
-                                    controller?.pause()
-                                    sleepLabel = "Sleep timer finished"
+                                browseFolder = if (parent.isBlank()) {
+                                    null
+                                } else {
+                                    parent
                                 }
-
-                                showSleepDialog = false
                             }
                         ) {
                             Text(
-                                "$minutes minutes",
-                                color = KGLightGold
+                                "‹ BACK TO FOLDERS",
+                                color = lightCopper,
+                                fontSize = 11.sp
                             )
                         }
                     }
 
-                    TextButton(
-                        onClick = {
-                            sleepJob?.cancel()
-                            sleepJob = null
-                            sleepLabel = "Sleep timer"
-                            showSleepDialog = false
-                        }
+                    LazyColumn(
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Text(
-                            "CANCEL TIMER",
-                            color = KGMuted
+                        val folderList = childFolders(
+                            browseFolder ?: ""
                         )
+
+                        items(folderList, key = { it }) { folder ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "▣  ${folderName(folder)}",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable {
+                                            browseFolder = folder
+                                        }
+                                        .padding(vertical = 8.dp)
+                                )
+
+                                TextButton(
+                                    onClick = {
+                                        requestAddFolder(folder)
+                                    }
+                                ) {
+                                    Text(
+                                        "ADD",
+                                        color = copper,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+
+                            HorizontalDivider(color = line)
+                        }
+
+                        val currentFolderSongs = if (browseFolder == null) {
+                            emptyList()
+                        } else {
+                            directSongs(browseFolder!!)
+                        }
+
+                        items(
+                            currentFolderSongs,
+                            key = { it.uri.toString() }
+                        ) { song ->
+                            val uri = song.uri.toString()
+                            val checked = selectedUris.contains(uri)
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedUris = if (checked) {
+                                            selectedUris - uri
+                                        } else {
+                                            selectedUris + uri
+                                        }
+                                    }
+                                    .padding(vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = { isChecked ->
+                                        selectedUris = if (isChecked) {
+                                            selectedUris + uri
+                                        } else {
+                                            selectedUris - uri
+                                        }
+                                    },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = copper,
+                                        uncheckedColor = muted,
+                                        checkmarkColor = Color.White
+                                    )
+                                )
+
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        song.title,
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+
+                                    if (song.artist.isNotBlank()) {
+                                        Text(
+                                            song.artist,
+                                            color = muted,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
+
+                    Text(
+                        "${selectedUris.size} songs selected",
+                        color = lightCopper,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        showSleepDialog = false
+                        val playlistName = selectedPlaylistName
+
+                        if (playlistName != null) {
+                            val chosenSongs = songs.filter {
+                                selectedUris.contains(it.uri.toString())
+                            }
+
+                            saveSongsToPlaylist(
+                                playlistName,
+                                chosenSongs
+                            )
+                        }
+
+                        showAddDialog = false
+                        browseFolder = null
+                        selectedUris = emptySet()
                     }
                 ) {
-                    Text(
-                        "CLOSE",
-                        color = KGLightGold
-                    )
+                    Text("ADD SELECTED", color = lightCopper)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showAddDialog = false
+                        browseFolder = null
+                        selectedUris = emptySet()
+                    }
+                ) {
+                    Text("DONE", color = muted)
+                }
+            }
+        )
+    }
+
+    if (showFolderPrompt) {
+        AlertDialog(
+            onDismissRequest = {
+                showFolderPrompt = false
+                pendingFolder = null
+            },
+            containerColor = panel,
+            title = {
+                Text(
+                    "Add subfolders too?",
+                    color = lightCopper,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingFolder?.let {
+                            addFolderToPlaylist(it, true)
+                        }
+                    }
+                ) {
+                    Text("YES", color = lightCopper)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        pendingFolder?.let {
+                            addFolderToPlaylist(it, false)
+                        }
+                    }
+                ) {
+                    Text("NO", color = muted)
                 }
             }
         )
