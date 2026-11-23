@@ -1,7 +1,6 @@
 
 package com.kgmusic.player
 
-import android.media.audiofx.Equalizer
 import android.media.audiofx.BassBoost
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
@@ -10,7 +9,6 @@ import kotlin.math.log10
 
 class AudioEffects(audioSessionId: Int) {
 
-    private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var virtualizer: Virtualizer? = null
@@ -22,14 +20,6 @@ class AudioEffects(audioSessionId: Int) {
     )
 
     init {
-        try {
-            equalizer = Equalizer(0, audioSessionId).apply {
-                enabled = true
-            }
-        } catch (_: Exception) {
-            equalizer = null
-        }
-
         try {
             bassBoost = BassBoost(0, audioSessionId).apply {
                 enabled = true
@@ -65,63 +55,25 @@ class AudioEffects(audioSessionId: Int) {
         }
     }
 
+    // The new DSP equalizer provides ten bands.
     fun getAvailableBands(): Int {
-        return try {
-            equalizer?.numberOfBands?.toInt() ?: 0
-        } catch (_: Exception) {
-            0
-        }
+        return frequencies.size
     }
 
     fun setEqualizerEnabled(enabled: Boolean) {
-        try {
-            equalizer?.enabled = enabled
-        } catch (_: Exception) {
-        }
+        PlaybackService.tenBandEqualizer.setEnabled(enabled)
+    }
+
+    fun setEqualizerBand(index: Int, level: Int) {
+        PlaybackService.tenBandEqualizer.setBandGain(
+            index,
+            level.toFloat()
+        )
     }
 
     fun setVolumeEnabled(enabled: Boolean) {
         try {
             loudnessEnhancer?.enabled = enabled
-        } catch (_: Exception) {
-        }
-    }
-
-    fun setEqualizerBand(index: Int, level: Int) {
-        try {
-            val eq = equalizer ?: return
-            val range = eq.bandLevelRange
-
-            val safeLevel = level.coerceIn(
-                range[0].toInt(),
-                range[1].toInt()
-            )
-
-            val frequency = frequencies.getOrNull(index) ?: return
-            val bandCount = eq.numberOfBands.toInt()
-
-            if (bandCount <= 0) return
-
-            var closestBand = 0
-            var smallestDifference = Int.MAX_VALUE
-
-            for (band in 0 until bandCount) {
-                val centerFrequency =
-                    eq.getCenterFreq(band.toShort()) / 1000
-
-                val difference =
-                    kotlin.math.abs(centerFrequency - frequency)
-
-                if (difference < smallestDifference) {
-                    smallestDifference = difference
-                    closestBand = band
-                }
-            }
-
-            eq.setBandLevel(
-                closestBand.toShort(),
-                safeLevel.toShort()
-            )
         } catch (_: Exception) {
         }
     }
@@ -171,54 +123,62 @@ class AudioEffects(audioSessionId: Int) {
             val safeStrength = strength.coerceIn(0, 100)
 
             reverb.setRoomLevel(
-                (-1000 - safeStrength * 20).coerceIn(-9000, 0).toShort()
+                (-1000 - safeStrength * 20)
+                    .coerceIn(-9000, 0).toShort()
             )
 
             reverb.setRoomHFLevel(
-                (-500 - safeStrength * 25).coerceIn(-9000, 0).toShort()
+                (-500 - safeStrength * 25)
+                    .coerceIn(-9000, 0).toShort()
             )
 
             reverb.setDecayTime(
-                (600 + safeStrength * 45).coerceIn(100, 20000)
+                (600 + safeStrength * 45)
+                    .coerceIn(100, 20000)
             )
 
             reverb.setDecayHFRatio(
-                (500 + safeStrength * 5).coerceIn(100, 2000).toShort()
+                (500 + safeStrength * 5)
+                    .coerceIn(100, 2000).toShort()
             )
 
             reverb.setReflectionsLevel(
-                (-9000 + safeStrength * 55).coerceIn(-9000, 1000).toShort()
+                (-9000 + safeStrength * 55)
+                    .coerceIn(-9000, 1000).toShort()
             )
 
             reverb.setReflectionsDelay(
-                (10 + safeStrength / 5).coerceIn(0, 300)
+                (10 + safeStrength / 5)
+                    .coerceIn(0, 300)
             )
 
             reverb.setReverbLevel(
-                (-9000 + safeStrength * 70).coerceIn(-9000, 2000).toShort()
+                (-9000 + safeStrength * 70)
+                    .coerceIn(-9000, 2000).toShort()
             )
 
             reverb.setReverbDelay(
-                (20 + safeStrength / 4).coerceIn(0, 100)
+                (20 + safeStrength / 4)
+                    .coerceIn(0, 100)
             )
 
             reverb.setDiffusion(
-                (500 + safeStrength * 5).coerceIn(0, 1000).toShort()
+                (500 + safeStrength * 5)
+                    .coerceIn(0, 1000).toShort()
             )
 
             reverb.setDensity(
-                (500 + safeStrength * 5).coerceIn(0, 1000).toShort()
+                (500 + safeStrength * 5)
+                    .coerceIn(0, 1000).toShort()
             )
         } catch (_: Exception) {
         }
     }
 
-    // Retained for compatibility with the existing EQ screen.
     fun setVolumeBoost(percent: Int) {
         setVolumeLevel(percent)
     }
 
-    // Supports Mute, reduced volume, normal volume and boosted volume.
     fun setVolumeLevel(percent: Int) {
         try {
             val safePercent = percent.coerceIn(0, 200)
@@ -237,11 +197,6 @@ class AudioEffects(audioSessionId: Int) {
     }
 
     fun release() {
-        try {
-            equalizer?.release()
-        } catch (_: Exception) {
-        }
-
         try {
             bassBoost?.release()
         } catch (_: Exception) {
@@ -262,7 +217,6 @@ class AudioEffects(audioSessionId: Int) {
         } catch (_: Exception) {
         }
 
-        equalizer = null
         bassBoost = null
         loudnessEnhancer = null
         virtualizer = null
