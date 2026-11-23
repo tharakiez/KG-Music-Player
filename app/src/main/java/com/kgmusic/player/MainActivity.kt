@@ -3,6 +3,7 @@ package com.kgmusic.player
 
 import android.Manifest
 import android.content.ComponentName
+import android.content.pm.ActivityInfo
 import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.os.Build
@@ -19,6 +20,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -391,7 +393,10 @@ class MainActivity : ComponentActivity() {
 
         var songs by remember { mutableStateOf(emptyList<Song>()) }
         var hasPermission by remember { mutableStateOf(false) }
-        var showEqualizer by remember { mutableStateOf(false) }
+
+        // Save this state across the landscape/portrait activity recreation.
+        var showEqualizer by rememberSaveable { mutableStateOf(false) }
+
         var showQueue by remember { mutableStateOf(false) }
         var showPlaylists by remember { mutableStateOf(false) }
         var shuffle by remember { mutableStateOf(false) }
@@ -400,6 +405,15 @@ class MainActivity : ComponentActivity() {
         var repeatMode by remember { mutableStateOf(0) }
 
         var currentFolder by remember { mutableStateOf<String?>(null) }
+
+        // Only Sound Console uses landscape orientation.
+        LaunchedEffect(showEqualizer) {
+            requestedOrientation = if (showEqualizer) {
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
+        }
 
         val connected by controllerReady
         val currentSong by currentSongState
