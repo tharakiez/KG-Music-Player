@@ -87,6 +87,10 @@ fun EqualizerScreen(
         mutableStateOf(preferences.getBoolean("virtualizer_enabled", true))
     }
 
+    var reverbEnabled by remember {
+        mutableStateOf(preferences.getBoolean("reverb_enabled", false))
+    }
+
     val levels = remember {
         mutableStateListOf<Float>().apply {
             bandIndexes.forEach { index ->
@@ -111,12 +115,18 @@ fun EqualizerScreen(
         mutableFloatStateOf(preferences.getFloat("virtualizer", 0f))
     }
 
+    var reverb by remember {
+        mutableFloatStateOf(
+            preferences.getFloat("reverb", 35f).coerceIn(0f, 100f)
+        )
+    }
+
     var volume by remember {
-    mutableIntStateOf(
-        ((preferences.all["volume"] as? Number)?.toInt() ?: 100)
-            .coerceIn(0, 200)
-    )
-}
+        mutableIntStateOf(
+            ((preferences.all["volume"] as? Number)?.toInt() ?: 100)
+                .coerceIn(0, 200)
+        )
+    }
 
     var pendingVolume by remember { mutableIntStateOf(volume) }
     var showVolumeWarning by remember { mutableStateOf(false) }
@@ -133,6 +143,7 @@ fun EqualizerScreen(
             .putBoolean("volume_enabled", volumeEnabled)
             .putBoolean("bass_enabled", bassEnabled)
             .putBoolean("virtualizer_enabled", virtualizerEnabled)
+            .putBoolean("reverb_enabled", reverbEnabled)
             .apply()
     }
 
@@ -232,6 +243,18 @@ fun EqualizerScreen(
             .apply()
     }
 
+    fun changeReverb(value: Float) {
+        reverb = value.coerceIn(0f, 100f)
+
+        if (reverbEnabled) {
+            audioEffects?.setReverbStrength(reverb.toInt())
+        }
+
+        preferences.edit()
+            .putFloat("reverb", reverb)
+            .apply()
+    }
+
     fun applyVolume(value: Int) {
         volume = value.coerceIn(0, 200)
         audioEffects?.setVolumeLevel(volume)
@@ -245,6 +268,9 @@ fun EqualizerScreen(
             effects.setVolumeEnabled(volumeEnabled)
             effects.setBassEnabled(bassEnabled)
             effects.setVirtualizerEnabled(virtualizerEnabled)
+
+            effects.setReverbStrength(reverb.toInt())
+            effects.setReverbEnabled(reverbEnabled)
 
             bandIndexes.forEachIndexed { index, band ->
                 effects.setEqualizerBand(
@@ -476,6 +502,93 @@ fun EqualizerScreen(
                 )
             }
 
+            Spacer(Modifier.height(12.dp))
+
+            ConsolePanel(title = "ROOM REVERB") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "SPATIAL AMBIENCE",
+                            color = EQGold,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Adds a room-like acoustic tail",
+                            color = EQMuted,
+                            fontSize = 9.sp
+                        )
+                    }
+
+                    Surface(
+                        onClick = {
+                            reverbEnabled = !reverbEnabled
+                            audioEffects?.setReverbEnabled(reverbEnabled)
+
+                            if (reverbEnabled) {
+                                audioEffects?.setReverbStrength(reverb.toInt())
+                            }
+
+                            savePowerSettings()
+                        },
+                        color = if (reverbEnabled) EQCopper else EQMetal,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            if (reverbEnabled) "ON" else "OFF",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(
+                                horizontal = 16.dp,
+                                vertical = 9.dp
+                            )
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "STRENGTH",
+                        color = EQMuted,
+                        fontSize = 10.sp
+                    )
+
+                    Spacer(Modifier.weight(1f))
+
+                    Text(
+                        "${reverb.toInt()}%",
+                        color = EQGold,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                RotaryKnob(
+                    value = reverb,
+                    enabled = reverbEnabled,
+                    onValueChange = { changeReverb(it) },
+                    modifier = Modifier
+                        .size(145.dp)
+                        .align(Alignment.CenterHorizontally)
+                )
+
+                Text(
+                    "LOW: subtle room  •  HIGH: stronger ambience",
+                    color = EQMuted,
+                    fontSize = 9.sp
+                )
+            }
+
         } else {
 
             ConsolePanel(title = "MASTER VOLUME CONTROL") {
@@ -616,6 +729,7 @@ fun EqualizerScreen(
                 applyPreset("Normal")
                 changeBass(0f)
                 changeVirtualizer(0f)
+                changeReverb(0f)
                 applyVolume(100)
 
                 bandEnabled.indices.forEach {
@@ -627,11 +741,13 @@ fun EqualizerScreen(
                 volumeEnabled = true
                 bassEnabled = true
                 virtualizerEnabled = true
+                reverbEnabled = false
 
                 audioEffects?.setEqualizerEnabled(true)
                 audioEffects?.setVolumeEnabled(true)
                 audioEffects?.setBassEnabled(true)
                 audioEffects?.setVirtualizerEnabled(true)
+                audioEffects?.setReverbEnabled(false)
 
                 savePowerSettings()
             },
