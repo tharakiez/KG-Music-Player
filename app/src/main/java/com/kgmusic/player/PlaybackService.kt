@@ -2,6 +2,7 @@
 package com.kgmusic.player
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Handler
@@ -10,12 +11,18 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import org.json.JSONArray
 import org.json.JSONObject
 
+@OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
@@ -26,6 +33,9 @@ class PlaybackService : MediaSessionService() {
     companion object {
         var audioSessionId: Int = 0
             private set
+
+        val tenBandEqualizer =
+            TenBandEqualizerAudioProcessor()
 
         private const val PREFS = "kg_playback_session"
         private const val QUEUE_KEY = "queue"
@@ -46,7 +56,29 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        val exoPlayer = ExoPlayer.Builder(this).build()
+        val renderersFactory =
+            object : DefaultRenderersFactory(this) {
+
+                override fun buildAudioSink(
+                    context: Context,
+                    enableFloatOutput: Boolean,
+                    enableAudioOutputPlaybackParams: Boolean
+                ): AudioSink {
+                    return DefaultAudioSink.Builder(context)
+                        .setAudioProcessors(
+                            arrayOf<AudioProcessor>(
+                                tenBandEqualizer
+                            )
+                        )
+                        .build()
+                }
+            }
+
+        val exoPlayer = ExoPlayer.Builder(
+            this,
+            renderersFactory
+        ).build()
+
         player = exoPlayer
 
         audioSessionId = exoPlayer.audioSessionId
