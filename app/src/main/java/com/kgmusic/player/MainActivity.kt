@@ -640,7 +640,23 @@ class MainActivity : ComponentActivity() {
                                 repeatMode
                             )
                         },
+onAddToQueue = { selectedSongs ->
+    val controller = mediaController
 
+    if (controller != null && selectedSongs.isNotEmpty()) {
+        val items = selectedSongs.map { createMediaItem(it) }
+
+        if (controller.mediaItemCount == 0) {
+            controller.setMediaItems(items)
+            controller.prepare()
+            controller.play()
+        } else {
+            controller.addMediaItems(items)
+        }
+
+        updateQueue(controller)
+    }
+},
                         // NEW: Connect HomeScreen folder queue action
                         onAddToQueue = { selectedSongs ->
                             addSongsToQueue(selectedSongs)
