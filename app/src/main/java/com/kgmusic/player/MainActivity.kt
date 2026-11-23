@@ -352,6 +352,39 @@ class MainActivity : ComponentActivity() {
         ).show()
     }
 
+    private fun addSongsToQueue(songs: List<Song>) {
+        val controller = mediaController
+
+        if (controller == null) {
+            Toast.makeText(
+                this,
+                "Playback service is not ready",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        if (songs.isEmpty()) return
+
+        val items = songs.map { createMediaItem(it) }
+
+        if (controller.mediaItemCount == 0) {
+            controller.setMediaItems(items)
+            controller.prepare()
+            controller.play()
+        } else {
+            controller.addMediaItems(items)
+        }
+
+        updateQueue(controller)
+
+        Toast.makeText(
+            this,
+            "Added ${songs.size} songs to queue",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun KGMusicApp() {
@@ -596,6 +629,10 @@ class MainActivity : ComponentActivity() {
                                 shuffle,
                                 repeatMode
                             )
+                        },
+
+                        onAddToQueue = { selectedSongs ->
+                            addSongsToQueue(selectedSongs)
                         },
 
                         onOpenQueue = {
