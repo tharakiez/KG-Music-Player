@@ -2,6 +2,7 @@
 package com.kgmusic.player
 
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
@@ -38,6 +39,7 @@ fun HomeScreen(
     onOpenPlaylists: () -> Unit,
     onExit: () -> Unit,
     onPlaySongs: (List<Song>, Int) -> Unit,
+    onAddToQueue: (List<Song>) -> Unit,
     onOpenQueue: () -> Unit,
     onPrevious: () -> Unit,
     onTogglePlayback: () -> Unit,
@@ -92,8 +94,24 @@ fun HomeScreen(
         editor.apply()
     }
 
+    // Existing song playback prompt
     var showSubfolderPrompt by remember { mutableStateOf(false) }
     var pendingSong by remember { mutableStateOf<Song?>(null) }
+
+    // New folder action menu and dialogs
+    var folderActionMenuPath by remember { mutableStateOf<String?>(null) }
+    var pendingFolderPath by remember { mutableStateOf<String?>(null) }
+    var pendingFolderAction by remember { mutableStateOf("") }
+    var showFolderActionPrompt by remember { mutableStateOf(false) }
+    var showPlaylistPicker by remember { mutableStateOf(false) }
+
+    var pendingFolderSongs by remember {
+        mutableStateOf<List<Song>>(emptyList())
+    }
+
+    var availablePlaylists by remember {
+        mutableStateOf(PlaylistStorage.load(context))
+    }
 
     fun normalizedPath(path: String): String {
         return path.trim('/')
@@ -148,7 +166,10 @@ fun HomeScreen(
         }.distinct().sortedBy { it.lowercase() }
     }
 
-    fun songsInFolder(path: String, includeSubfolders: Boolean): List<Song> {
+    fun songsInFolder(
+        path: String,
+        includeSubfolders: Boolean
+    ): List<Song> {
         val clean = normalizedPath(path)
 
         return songs.filter { song ->
@@ -167,6 +188,7 @@ fun HomeScreen(
         )
     }
 
+    // Existing folder playback
     fun playSelectedFolder(includeSubfolders: Boolean) {
         val folder = selectedFolder ?: return
         val folderSongs = songsInFolder(folder, includeSubfolders)
@@ -188,10 +210,13 @@ fun HomeScreen(
             showSubfolderPrompt = true
         } else {
             val folderSongs = directSongs(folder)
+
             val startIndex = if (song == null) {
                 0
             } else {
-                folderSongs.indexOfFirst { it.uri == song.uri }.coerceAtLeast(0)
+                folderSongs.indexOfFirst {
+                    it.uri == song.uri
+                }.coerceAtLeast(0)
             }
 
             if (folderSongs.isNotEmpty()) {
@@ -208,7 +233,9 @@ fun HomeScreen(
         val startIndex = if (selectedSong == null) {
             0
         } else {
-            folderSongs.indexOfFirst { it.uri == selectedSong.uri }.coerceAtLeast(0)
+            folderSongs.indexOfFirst {
+                it.uri == selectedSong.uri
+            }.coerceAtLeast(0)
         }
 
         if (folderSongs.isNotEmpty()) {
@@ -219,14 +246,175 @@ fun HomeScreen(
         pendingSong = null
     }
 
+    // New folder action handler
+    fun executeFolderAction(
+        path: String,
+        action: String,
+        includeSubfolders: Boolean
+    ) {
+        val folderSongs = songsInFolder(path, includeSubfolders)
+
+        if (folderSongs.isEmpty()) {
+            Toast.makeText(
+                context,
+                "No songs found in this folder",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        when (action) {
+            "play" -> {
+                onPlaySongs(folderSongs, 0)
+            }
+
+            "queue" -> {
+                onAddToQueue(folderSongs)
+            }
+
+            "playlist" -> {
+                pendingFolderSongs = folderSongs
+                availablePlaylists = PlaylistStorage.load(context)
+                showPlaylistPicker = true
+            }
+        }
+    }
+
+    fun requestFolderAction(path: String, action: String) {
+        folderActionMenuPath = null
+
+        if (childFolders(path).isNotEmpty()) {
+            pendingFolderPath = path
+            pendingFolderAction = action
+            showFolderActionPrompt = true
+        } else {
+            executeFolderAction(path, action, false)
+        }
+    }
+
+    fun completeFolderAction(includeSubfolders: Boolean) {
+        val path = pendingFolderPath
+        val action = pendingFolderAction
+
+        showFolderActionPrompt = false
+        pendingFolderPath = null
+        pendingFolderAction = ""
+
+        if (path != null) {
+            executeFolderAction(path, action, includeSubfolders)
+        }
+    }
+
+    fun addFolderSongsToPlaylist(playlistName: String) {
+        var addedCount = 0
+
+        pendingFolderSongs.forEach { song ->
+            val added = PlaylistStorage.addSong(
+                context,
+                playlistName,
+                SavedPlaylistSong(
+                    title = song.title,
+                    artist = song.artist,
+                    uri = song.uri.toString(),
+                    folderPath = song.folderPath
+                )
+            )
+
+            if (added) addedCount++
+        }
+
+        Toast.makeText(
+            context,
+            "$addedCount songs added to $playlistName",
+            Toast.LENGTH_SHORT
+        ).show()
+
+        showPlaylistPicker = false
+        pendingFolderSongs = emptyList()
+        availablePlaylists = PlaylistStorage.load(context)
+    }
+
+    @Composable
+    fun FolderActionMenu(path: String) {
+        var expanded by remember(path) {
+            mutableStateOf(false)
+        }
+
+        Box {
+            TextButton(
+                onClick = { expanded = true },
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) {
+                Text(
+                    "⋮",
+                    color = lightCopper,
+                    fontSize = 23.sp
+                )
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.background(panel)
+            ) {
+                DropdownMenuItem(
+                    text = {
+                        Text("Play folder", color = Color.White)
+                    },
+                    onClick = {
+                        expanded = false
+                        requestFolderAction(path, "play")
+                    }
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Text("Add to playlist", color = Color.White)
+                    },
+                    onClick = {
+                        expanded = false
+                        requestFolderAction(path, "playlist")
+                    }
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Text("Add to Now Playing", color = Color.White)
+                    },
+                    onClick = {
+                        expanded = false
+                        requestFolderAction(path, "queue")
+                    }
+                )
+            }
+        }
+    }
+
     BackHandler(
         enabled = drawerOpen || menuOpen ||
-            showSubfolderPrompt || searchOpen || section != "Home"
+            showSubfolderPrompt ||
+            showFolderActionPrompt ||
+            showPlaylistPicker ||
+            folderActionMenuPath != null ||
+            searchOpen || section != "Home"
     ) {
         when {
+            showPlaylistPicker -> {
+                showPlaylistPicker = false
+            }
+
+            showFolderActionPrompt -> {
+                showFolderActionPrompt = false
+                pendingFolderPath = null
+            }
+
             showSubfolderPrompt -> {
                 showSubfolderPrompt = false
                 pendingSong = null
+            }
+
+            folderActionMenuPath != null -> {
+                folderActionMenuPath = null
             }
 
             menuOpen -> menuOpen = false
@@ -234,12 +422,14 @@ fun HomeScreen(
 
             section == "Folder" && selectedFolder != null -> {
                 val parent = parentPath(selectedFolder!!)
+
                 if (parent.isNotBlank()) {
                     selectedFolder = parent
                 } else {
                     selectedFolder = null
                     section = "Folders"
                 }
+
                 searchText = ""
             }
 
@@ -272,9 +462,17 @@ fun HomeScreen(
             .sortedBy { it.lowercase() }
     }
 
-    val visibleSongs = remember(songs, searchText, section, selectedFolder) {
+    val visibleSongs = remember(
+        songs,
+        searchText,
+        section,
+        selectedFolder
+    ) {
         val base = when (section) {
-            "Folder" -> selectedFolder?.let { directSongs(it) } ?: emptyList()
+            "Folder" -> selectedFolder?.let {
+                directSongs(it)
+            } ?: emptyList()
+
             "Artists" -> songs
             else -> songs
         }
@@ -294,7 +492,11 @@ fun HomeScreen(
     fun menuEntry(label: String, action: () -> Unit) {
         DropdownMenuItem(
             text = {
-                Text(label, color = Color.White, fontSize = 14.sp)
+                Text(
+                    label,
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
             },
             onClick = action
         )
@@ -321,27 +523,40 @@ fun HomeScreen(
                     },
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
-                    Text("☰", color = lightCopper, fontSize = 25.sp)
+                    Text(
+                        "☰",
+                        color = lightCopper,
+                        fontSize = 25.sp
+                    )
                 }
 
                 DropdownMenu(
                     expanded = drawerOpen,
                     onDismissRequest = { drawerOpen = false },
-                    modifier = Modifier.background(panel).width(220.dp)
+                    modifier = Modifier
+                        .background(panel)
+                        .width(220.dp)
                 ) {
                     Text(
                         "KG MUSIC",
                         color = lightCopper,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 2.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                        modifier = Modifier.padding(
+                            horizontal = 16.dp,
+                            vertical = 12.dp
+                        )
                     )
 
                     HorizontalDivider(color = line)
 
                     listOf(
-                        "Songs", "Folders", "Genres",
-                        "Artists", "Playlists", "Settings"
+                        "Songs",
+                        "Folders",
+                        "Genres",
+                        "Artists",
+                        "Playlists",
+                        "Settings"
                     ).forEach { item ->
                         menuEntry(item) {
                             drawerOpen = false
@@ -366,6 +581,7 @@ fun HomeScreen(
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 2.sp
                 )
+
                 Text(
                     "BANJUKA ARTS",
                     color = muted,
@@ -381,7 +597,11 @@ fun HomeScreen(
                 },
                 contentPadding = PaddingValues(6.dp)
             ) {
-                Text("⌕", color = lightCopper, fontSize = 27.sp)
+                Text(
+                    "⌕",
+                    color = lightCopper,
+                    fontSize = 27.sp
+                )
             }
 
             Box {
@@ -392,7 +612,11 @@ fun HomeScreen(
                     },
                     contentPadding = PaddingValues(6.dp)
                 ) {
-                    Text("⋮", color = lightCopper, fontSize = 27.sp)
+                    Text(
+                        "⋮",
+                        color = lightCopper,
+                        fontSize = 27.sp
+                    )
                 }
 
                 DropdownMenu(
@@ -404,15 +628,19 @@ fun HomeScreen(
                         menuOpen = false
                         onPlayAll()
                     }
+
                     menuEntry("Shuffle") {
                         menuOpen = false
                         onShuffle()
                     }
+
                     menuEntry("Equalizer") {
                         menuOpen = false
                         onOpenEqualizer()
                     }
+
                     HorizontalDivider(color = line)
+
                     menuEntry("Exit") {
                         menuOpen = false
                         onExit()
@@ -423,13 +651,17 @@ fun HomeScreen(
 
         if (searchOpen) {
             Spacer(Modifier.height(10.dp))
+
             OutlinedTextField(
                 value = searchText,
                 onValueChange = { searchText = it },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 placeholder = {
-                    Text("Search your music", color = muted)
+                    Text(
+                        "Search your music",
+                        color = muted
+                    )
                 },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
@@ -456,8 +688,11 @@ fun HomeScreen(
                         .clip(RoundedCornerShape(18.dp))
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.african_sunset_acacia),
-                        contentDescription = "African sunset with acacia trees and African music artwork",
+                        painter = painterResource(
+                            id = R.drawable.african_sunset_acacia
+                        ),
+                        contentDescription =
+                            "African sunset with acacia trees and African music artwork",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
@@ -490,7 +725,10 @@ fun HomeScreen(
                         onClick = onOpenEqualizer,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, gold),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            gold
+                        ),
                         contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
                         Text(
@@ -523,7 +761,9 @@ fun HomeScreen(
                 )
 
                 if (section == "Folder" && selectedFolder != null) {
-                    TextButton(onClick = { requestFolderPlayback() }) {
+                    TextButton(
+                        onClick = { requestFolderPlayback() }
+                    ) {
                         Text(
                             "PLAY FOLDER",
                             color = copper,
@@ -537,6 +777,7 @@ fun HomeScreen(
                     onClick = {
                         if (section == "Folder" && selectedFolder != null) {
                             val parent = parentPath(selectedFolder!!)
+
                             if (parent.isNotBlank()) {
                                 selectedFolder = parent
                             } else {
@@ -565,7 +806,9 @@ fun HomeScreen(
             when (section) {
                 "Genres" -> {
                     Box(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -585,24 +828,45 @@ fun HomeScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
-                                        selectedFolder = folder
-                                        section = "Folder"
-                                        searchText = ""
-                                    }
-                                    .padding(vertical = 15.dp),
+                                    .padding(vertical = 7.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("▣", color = copper, fontSize = 21.sp)
-                                Spacer(Modifier.width(14.dp))
-                                Text(
-                                    folder,
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text("›", color = lightCopper, fontSize = 22.sp)
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable {
+                                            selectedFolder = folder
+                                            section = "Folder"
+                                            searchText = ""
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "▣",
+                                        color = copper,
+                                        fontSize = 21.sp
+                                    )
+
+                                    Spacer(Modifier.width(14.dp))
+
+                                    Text(
+                                        folder,
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    Text(
+                                        "›",
+                                        color = lightCopper,
+                                        fontSize = 22.sp
+                                    )
+                                }
+
+                                FolderActionMenu(folder)
                             }
+
                             HorizontalDivider(color = line)
                         }
                     }
@@ -610,8 +874,12 @@ fun HomeScreen(
 
                 "Folder" -> {
                     val folder = selectedFolder ?: ""
-                    val children = remember(songs, folder) { childFolders(folder) }
-                    val folderSongs = remember(songs, folder) { directSongs(folder) }
+                    val children = remember(songs, folder) {
+                        childFolders(folder)
+                    }
+                    val folderSongs = remember(songs, folder) {
+                        directSongs(folder)
+                    }
 
                     LazyColumn(
                         modifier = Modifier.weight(1f),
@@ -621,31 +889,57 @@ fun HomeScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
-                                        selectedFolder = child
-                                        searchText = ""
-                                    }
-                                    .padding(vertical = 14.dp),
+                                    .padding(vertical = 7.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("▣", color = copper, fontSize = 21.sp)
-                                Spacer(Modifier.width(14.dp))
-                                Text(
-                                    folderName(child),
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text("›", color = lightCopper, fontSize = 22.sp)
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable {
+                                            selectedFolder = child
+                                            searchText = ""
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "▣",
+                                        color = copper,
+                                        fontSize = 21.sp
+                                    )
+
+                                    Spacer(Modifier.width(14.dp))
+
+                                    Text(
+                                        folderName(child),
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    Text(
+                                        "›",
+                                        color = lightCopper,
+                                        fontSize = 22.sp
+                                    )
+                                }
+
+                                FolderActionMenu(child)
                             }
+
                             HorizontalDivider(color = line)
                         }
 
-                        items(folderSongs, key = { it.uri.toString() }) { song ->
+                        items(
+                            folderSongs,
+                            key = { it.uri.toString() }
+                        ) { song ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { requestFolderPlayback(song) }
+                                    .clickable {
+                                        requestFolderPlayback(song)
+                                    }
                                     .padding(vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -656,12 +950,18 @@ fun HomeScreen(
                                         .background(Color(0xFF302016)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("♫", color = lightCopper, fontSize = 21.sp)
+                                    Text(
+                                        "♫",
+                                        color = lightCopper,
+                                        fontSize = 21.sp
+                                    )
                                 }
 
                                 Spacer(Modifier.width(12.dp))
 
-                                Column(modifier = Modifier.weight(1f)) {
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
                                     Text(
                                         song.title,
                                         color = Color.White,
@@ -670,6 +970,7 @@ fun HomeScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+
                                     if (song.artist.isNotBlank()) {
                                         Text(
                                             song.artist,
@@ -681,8 +982,13 @@ fun HomeScreen(
                                     }
                                 }
 
-                                Text("▶", color = copper, fontSize = 13.sp)
+                                Text(
+                                    "▶",
+                                    color = copper,
+                                    fontSize = 13.sp
+                                )
                             }
+
                             HorizontalDivider(color = line)
                         }
                     }
@@ -707,13 +1013,19 @@ fun HomeScreen(
                                     }
                                     .padding(vertical = 14.dp)
                             ) {
-                                Text(artist, color = Color.White, fontSize = 14.sp)
+                                Text(
+                                    artist,
+                                    color = Color.White,
+                                    fontSize = 14.sp
+                                )
+
                                 Text(
                                     "VIEW ARTIST SONGS  ›",
                                     color = muted,
                                     fontSize = 9.sp
                                 )
                             }
+
                             HorizontalDivider(color = line)
                         }
                     }
@@ -724,7 +1036,10 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(bottom = 12.dp)
                     ) {
-                        items(visibleSongs, key = { it.uri.toString() }) { song ->
+                        items(
+                            visibleSongs,
+                            key = { it.uri.toString() }
+                        ) { song ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -732,9 +1047,11 @@ fun HomeScreen(
                                         val ordered = songs.sortedBy {
                                             it.title.lowercase()
                                         }
+
                                         val index = ordered.indexOfFirst {
                                             it.uri == song.uri
                                         }
+
                                         if (index >= 0) {
                                             onPlaySongs(ordered, index)
                                         }
@@ -749,12 +1066,18 @@ fun HomeScreen(
                                         .background(Color(0xFF302016)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("♫", color = lightCopper, fontSize = 21.sp)
+                                    Text(
+                                        "♫",
+                                        color = lightCopper,
+                                        fontSize = 21.sp
+                                    )
                                 }
 
                                 Spacer(Modifier.width(12.dp))
 
-                                Column(modifier = Modifier.weight(1f)) {
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
                                     Text(
                                         song.title,
                                         color = Color.White,
@@ -763,6 +1086,7 @@ fun HomeScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+
                                     if (song.artist.isNotBlank()) {
                                         Text(
                                             song.artist,
@@ -774,8 +1098,13 @@ fun HomeScreen(
                                     }
                                 }
 
-                                Text("▶", color = copper, fontSize = 13.sp)
+                                Text(
+                                    "▶",
+                                    color = copper,
+                                    fontSize = 13.sp
+                                )
                             }
+
                             HorizontalDivider(color = line)
                         }
                     }
@@ -789,10 +1118,15 @@ fun HomeScreen(
                 .fillMaxWidth()
                 .clickable { onOpenQueue() },
             shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = panel)
+            colors = CardDefaults.cardColors(
+                containerColor = panel
+            )
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
+                modifier = Modifier.padding(
+                    horizontal = 12.dp,
+                    vertical = 9.dp
+                )
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -806,6 +1140,7 @@ fun HomeScreen(
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 2.sp
                         )
+
                         Text(
                             currentSong,
                             color = Color.White,
@@ -840,16 +1175,28 @@ fun HomeScreen(
                         )
                     }
 
-                    TextButton(onClick = onPrevious, enabled = connected) {
-                        Text("⏮", color = lightCopper, fontSize = 19.sp)
+                    TextButton(
+                        onClick = onPrevious,
+                        enabled = connected
+                    ) {
+                        Text(
+                            "⏮",
+                            color = lightCopper,
+                            fontSize = 19.sp
+                        )
                     }
 
                     Button(
                         onClick = onTogglePlayback,
                         enabled = connected,
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = copper),
-                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 5.dp)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = copper
+                        ),
+                        contentPadding = PaddingValues(
+                            horizontal = 18.dp,
+                            vertical = 5.dp
+                        )
                     ) {
                         Text(
                             if (isPlaying) "Ⅱ" else "▶",
@@ -858,8 +1205,15 @@ fun HomeScreen(
                         )
                     }
 
-                    TextButton(onClick = onNext, enabled = connected) {
-                        Text("⏭", color = lightCopper, fontSize = 19.sp)
+                    TextButton(
+                        onClick = onNext,
+                        enabled = connected
+                    ) {
+                        Text(
+                            "⏭",
+                            color = lightCopper,
+                            fontSize = 19.sp
+                        )
                     }
 
                     TextButton(onClick = onRepeat) {
@@ -878,6 +1232,7 @@ fun HomeScreen(
         }
     }
 
+    // Existing song subfolder prompt
     if (showSubfolderPrompt) {
         AlertDialog(
             onDismissRequest = {
@@ -893,13 +1248,122 @@ fun HomeScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = { playFolderChoice(true) }) {
+                TextButton(
+                    onClick = { playFolderChoice(true) }
+                ) {
                     Text("YES", color = lightCopper)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { playFolderChoice(false) }) {
+                TextButton(
+                    onClick = { playFolderChoice(false) }
+                ) {
                     Text("NO", color = muted)
+                }
+            }
+        )
+    }
+
+    // New folder action subfolder prompt
+    if (showFolderActionPrompt) {
+        AlertDialog(
+            onDismissRequest = {
+                showFolderActionPrompt = false
+                pendingFolderPath = null
+            },
+            containerColor = panel,
+            title = {
+                Text(
+                    "Include subfolders?",
+                    color = lightCopper,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    "Should this action include songs inside the subfolders too?",
+                    color = muted
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        completeFolderAction(true)
+                    }
+                ) {
+                    Text("YES", color = lightCopper)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        completeFolderAction(false)
+                    }
+                ) {
+                    Text("NO", color = muted)
+                }
+            }
+        )
+    }
+
+    // Playlist selection dialog
+    if (showPlaylistPicker) {
+        AlertDialog(
+            onDismissRequest = {
+                showPlaylistPicker = false
+                pendingFolderSongs = emptyList()
+            },
+            containerColor = panel,
+            title = {
+                Text(
+                    "Choose playlist",
+                    color = lightCopper,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                if (availablePlaylists.isEmpty()) {
+                    Text(
+                        "You don't have any playlists yet. Create a playlist first.",
+                        color = muted
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier.heightIn(max = 300.dp)
+                    ) {
+                        availablePlaylists.forEach { playlist ->
+                            TextButton(
+                                onClick = {
+                                    addFolderSongsToPlaylist(playlist.name)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    playlist.name,
+                                    color = Color.White
+                                )
+                            }
+
+                            HorizontalDivider(color = line)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPlaylistPicker = false
+                        onOpenPlaylists()
+                    }
+                ) {
+                    Text(
+                        if (availablePlaylists.isEmpty()) {
+                            "CREATE PLAYLIST"
+                        } else {
+                            "CLOSE"
+                        },
+                        color = lightCopper
+                    )
                 }
             }
         )
