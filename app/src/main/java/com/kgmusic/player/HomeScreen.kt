@@ -1,5 +1,8 @@
+
 package com.kgmusic.player
 
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -49,12 +52,45 @@ fun HomeScreen(
     val muted = Color(0xFFAA9380)
     val line = Color(0xFF493326)
 
+    val context = LocalContext.current
+
+    val navigationPreferences = remember(context) {
+        context.getSharedPreferences(
+            "kg_navigation",
+            Context.MODE_PRIVATE
+        )
+    }
+
     var drawerOpen by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
-    var section by remember { mutableStateOf("Home") }
-    var selectedFolder by remember { mutableStateOf<String?>(null) }
+
+    var section by remember {
+        mutableStateOf(
+            navigationPreferences.getString("last_section", "Home")
+                ?: "Home"
+        )
+    }
+
+    var selectedFolder by remember {
+        mutableStateOf(
+            navigationPreferences.getString("last_folder", null)
+        )
+    }
+
+    LaunchedEffect(section, selectedFolder) {
+        val editor = navigationPreferences.edit()
+            .putString("last_section", section)
+
+        if (selectedFolder == null) {
+            editor.remove("last_folder")
+        } else {
+            editor.putString("last_folder", selectedFolder)
+        }
+
+        editor.apply()
+    }
 
     var showSubfolderPrompt by remember { mutableStateOf(false) }
     var pendingSong by remember { mutableStateOf<Song?>(null) }
