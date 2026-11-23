@@ -5,6 +5,7 @@ import android.media.audiofx.Equalizer
 import android.media.audiofx.BassBoost
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
+import android.media.audiofx.EnvironmentalReverb
 import kotlin.math.log10
 
 class AudioEffects(audioSessionId: Int) {
@@ -13,6 +14,7 @@ class AudioEffects(audioSessionId: Int) {
     private var bassBoost: BassBoost? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var virtualizer: Virtualizer? = null
+    private var environmentalReverb: EnvironmentalReverb? = null
 
     val frequencies = listOf(
         31, 62, 125, 250, 500,
@@ -51,6 +53,15 @@ class AudioEffects(audioSessionId: Int) {
             }
         } catch (_: Exception) {
             virtualizer = null
+        }
+
+        try {
+            environmentalReverb =
+                EnvironmentalReverb(0, audioSessionId).apply {
+                    enabled = false
+                }
+        } catch (_: Exception) {
+            environmentalReverb = null
         }
     }
 
@@ -147,13 +158,67 @@ class AudioEffects(audioSessionId: Int) {
         }
     }
 
+    fun setReverbEnabled(enabled: Boolean) {
+        try {
+            environmentalReverb?.enabled = enabled
+        } catch (_: Exception) {
+        }
+    }
+
+    fun setReverbStrength(strength: Int) {
+        try {
+            val reverb = environmentalReverb ?: return
+            val safeStrength = strength.coerceIn(0, 100)
+
+            reverb.setRoomLevel(
+                (-1000 - safeStrength * 20).coerceIn(-9000, 0).toShort()
+            )
+
+            reverb.setRoomHFLevel(
+                (-500 - safeStrength * 25).coerceIn(-9000, 0).toShort()
+            )
+
+            reverb.setDecayTime(
+                (600 + safeStrength * 45).coerceIn(100, 20000)
+            )
+
+            reverb.setDecayHFRatio(
+                (500 + safeStrength * 5).coerceIn(100, 2000).toShort()
+            )
+
+            reverb.setReflectionsLevel(
+                (-9000 + safeStrength * 55).coerceIn(-9000, 1000).toShort()
+            )
+
+            reverb.setReflectionsDelay(
+                (10 + safeStrength / 5).coerceIn(0, 300)
+            )
+
+            reverb.setReverbLevel(
+                (-9000 + safeStrength * 70).coerceIn(-9000, 2000).toShort()
+            )
+
+            reverb.setReverbDelay(
+                (20 + safeStrength / 4).coerceIn(0, 100)
+            )
+
+            reverb.setDiffusion(
+                (500 + safeStrength * 5).coerceIn(0, 1000).toShort()
+            )
+
+            reverb.setDensity(
+                (500 + safeStrength * 5).coerceIn(0, 1000).toShort()
+            )
+        } catch (_: Exception) {
+        }
+    }
+
     // Retained for compatibility with the existing EQ screen.
     fun setVolumeBoost(percent: Int) {
         setVolumeLevel(percent)
     }
 
     // Supports Mute, reduced volume, normal volume and boosted volume.
-    // The screen must request confirmation before applying values above 100%.
     fun setVolumeLevel(percent: Int) {
         try {
             val safePercent = percent.coerceIn(0, 200)
@@ -192,9 +257,15 @@ class AudioEffects(audioSessionId: Int) {
         } catch (_: Exception) {
         }
 
+        try {
+            environmentalReverb?.release()
+        } catch (_: Exception) {
+        }
+
         equalizer = null
         bassBoost = null
         loudnessEnhancer = null
         virtualizer = null
+        environmentalReverb = null
     }
 }
