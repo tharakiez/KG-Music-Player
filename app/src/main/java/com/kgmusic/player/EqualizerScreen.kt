@@ -653,9 +653,9 @@ private fun VerticalBandFader(
             if (!enabled) return@pointerInput
 
             fun update(y: Float) {
-                val usable = size.height.coerceAtLeast(1f)
-                val fraction = (1f - (y / usable)).coerceIn(0f, 1f)
-                onValueChange(-12f + fraction * 24f)
+    val usable = size.height.toFloat().coerceAtLeast(1f)
+    val fraction = (1f - (y / usable)).coerceIn(0f, 1f)
+    onValueChange(-12f + fraction * 24f)
             }
 
             detectTapGestures { update(it.y) }
@@ -663,11 +663,12 @@ private fun VerticalBandFader(
             if (!enabled) return@pointerInput
 
             detectDragGestures { change, _ ->
-                change.consume()
-                val fraction = (
-                    1f - change.position.y / size.height.coerceAtLeast(1f)
-                ).coerceIn(0f, 1f)
-                onValueChange(-12f + fraction * 24f)
+    change.consume()
+    val height = size.height.toFloat().coerceAtLeast(1f)
+    val fraction = (
+        1f - change.position.y / height
+    ).coerceIn(0f, 1f)
+    onValueChange(-12f + fraction * 24f)
             }
         }
     ) {
