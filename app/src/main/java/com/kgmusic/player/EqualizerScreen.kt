@@ -2,50 +2,39 @@
 package com.kgmusic.player
 
 import android.content.Context
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.cos
-import kotlin.math.sin
+import kotlin.math.roundToInt
 
-private val EQBlack = Color(0xFF090909)
-private val EQPanel = Color(0xFF191715)
-private val EQMetal = Color(0xFF302820)
+private val EQBlack = Color(0xFF090706)
+private val EQPanel = Color(0xFF1C1511)
 private val EQCopper = Color(0xFFB87333)
-private val EQGold = Color(0xFFE5B76C)
+private val EQGold = Color(0xFFE0A06A)
 private val EQMuted = Color(0xFF9B8B7A)
 private val EQGreen = Color(0xFF70D69A)
 
-private enum class SoundMode { EQ, VOLUME }
-
-private val bandLabels = listOf(
+private val eqLabels = listOf(
     "31", "62", "125", "250", "500",
     "1k", "2k", "4k", "8k", "16k"
 )
 
-private val soundPresets = mapOf(
+private val eqPresets = linkedMapOf(
     "Normal" to listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
     "Flat" to listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
     "Lounge" to listOf(3f, 2f, 1f, 0f, 0f, 1f, 2f, 2f, 1f, 0f),
@@ -65,7 +54,7 @@ fun EqualizerScreen(
 ) {
     val context = LocalContext.current
 
-    val preferences = remember(context) {
+    val prefs = remember(context) {
         context.getSharedPreferences(
             "kg_sound_settings",
             Context.MODE_PRIVATE
@@ -74,39 +63,33 @@ fun EqualizerScreen(
 
     val processor = PlaybackService.tenBandEqualizer
 
-    var mode by remember { mutableStateOf(SoundMode.EQ) }
-
     var eqEnabled by remember {
-        mutableStateOf(preferences.getBoolean("eq_enabled", true))
-    }
-    var volumeEnabled by remember {
-        mutableStateOf(preferences.getBoolean("volume_enabled", true))
+        mutableStateOf(prefs.getBoolean("eq_enabled", true))
     }
     var bassEnabled by remember {
-        mutableStateOf(preferences.getBoolean("bass_enabled", true))
+        mutableStateOf(prefs.getBoolean("bass_enabled", true))
     }
     var virtualizerEnabled by remember {
-        mutableStateOf(preferences.getBoolean("virtualizer_enabled", true))
+        mutableStateOf(prefs.getBoolean("virtualizer_enabled", true))
     }
     var reverbEnabled by remember {
-        mutableStateOf(preferences.getBoolean("reverb_enabled", false))
+        mutableStateOf(prefs.getBoolean("reverb_enabled", false))
+    }
+    var volumeEnabled by remember {
+        mutableStateOf(prefs.getBoolean("volume_enabled", true))
     }
 
-    // Keep old five-band settings when migrating to ten bands.
     val levels = remember {
         mutableStateListOf<Float>().apply {
             repeat(10) { index ->
                 val oldValue = if (index % 2 == 1) {
-                    preferences.getFloat("eq_$index", 0f)
+                    prefs.getFloat("eq_$index", 0f)
                 } else {
                     0f
                 }
-
                 add(
-                    preferences.getFloat(
-                        "ten_eq_$index",
-                        oldValue
-                    ).coerceIn(-12f, 12f)
+                    prefs.getFloat("ten_eq_$index", oldValue)
+                        .coerceIn(-12f, 12f)
                 )
             }
         }
@@ -115,19 +98,14 @@ fun EqualizerScreen(
     val bandEnabled = remember {
         mutableStateListOf<Boolean>().apply {
             repeat(10) { index ->
-                val oldValue = if (index % 2 == 1) {
-                    preferences.getBoolean(
-                        "band_${index / 2}",
-                        true
-                    )
-                } else {
-                    true
-                }
-
                 add(
-                    preferences.getBoolean(
+                    prefs.getBoolean(
                         "ten_band_enabled_$index",
-                        oldValue
+                        if (index % 2 == 1) {
+                            prefs.getBoolean("band_${index / 2}", true)
+                        } else {
+                            true
+                        }
                     )
                 )
             }
@@ -136,56 +114,38 @@ fun EqualizerScreen(
 
     var preamp by remember {
         mutableFloatStateOf(
-            preferences.getFloat("eq_preamp", 0f)
-                .coerceIn(-12f, 6f)
+            prefs.getFloat("eq_preamp", 0f).coerceIn(-12f, 6f)
         )
     }
-
     var bass by remember {
-        mutableFloatStateOf(preferences.getFloat("bass", 0f))
+        mutableFloatStateOf(prefs.getFloat("bass", 0f).coerceIn(0f, 100f))
     }
     var virtualizer by remember {
-        mutableFloatStateOf(preferences.getFloat("virtualizer", 0f))
+        mutableFloatStateOf(
+            prefs.getFloat("virtualizer", 0f).coerceIn(0f, 100f)
+        )
     }
     var reverb by remember {
         mutableFloatStateOf(
-            preferences.getFloat("reverb", 35f).coerceIn(0f, 100f)
+            prefs.getFloat("reverb", 35f).coerceIn(0f, 100f)
         )
     }
     var volume by remember {
-        mutableIntStateOf(
-            ((preferences.all["volume"] as? Number)?.toInt() ?: 100)
-                .coerceIn(0, 200)
+        mutableFloatStateOf(
+            prefs.getInt("volume", 100).toFloat().coerceIn(0f, 200f)
         )
     }
-
-    var pendingVolume by remember { mutableIntStateOf(volume) }
-    var showVolumeWarning by remember { mutableStateOf(false) }
-
     var preset by remember {
-        mutableStateOf(
-            preferences.getString("preset", "Normal") ?: "Normal"
-        )
+        mutableStateOf(prefs.getString("preset", "Normal") ?: "Normal")
     }
 
-    fun savePowerSettings() {
-        preferences.edit()
+    fun savePower() {
+        prefs.edit()
             .putBoolean("eq_enabled", eqEnabled)
-            .putBoolean("volume_enabled", volumeEnabled)
             .putBoolean("bass_enabled", bassEnabled)
             .putBoolean("virtualizer_enabled", virtualizerEnabled)
             .putBoolean("reverb_enabled", reverbEnabled)
-            .apply()
-    }
-
-    fun saveBand(index: Int) {
-        preferences.edit()
-            .putFloat("ten_eq_$index", levels[index])
-            .putBoolean(
-                "ten_band_enabled_$index",
-                bandEnabled[index]
-            )
-            .putString("preset", preset)
+            .putBoolean("volume_enabled", volumeEnabled)
             .apply()
     }
 
@@ -198,7 +158,10 @@ fun EqualizerScreen(
             if (bandEnabled[index]) levels[index] else 0f
         )
 
-        saveBand(index)
+        prefs.edit()
+            .putFloat("ten_eq_$index", levels[index])
+            .putString("preset", preset)
+            .apply()
     }
 
     fun toggleBand(index: Int) {
@@ -209,69 +172,61 @@ fun EqualizerScreen(
             if (bandEnabled[index]) levels[index] else 0f
         )
 
-        saveBand(index)
+        prefs.edit()
+            .putBoolean("ten_band_enabled_$index", bandEnabled[index])
+            .apply()
     }
 
     fun applyPreset(name: String) {
-        val values = soundPresets[name] ?: return
+        val values = eqPresets[name] ?: return
         preset = name
 
         values.forEachIndexed { index, value ->
             levels[index] = value
-
             processor.setBandGain(
                 index,
                 if (bandEnabled[index]) value else 0f
             )
-
-            preferences.edit()
-                .putFloat("ten_eq_$index", value)
-                .apply()
+            prefs.edit().putFloat("ten_eq_$index", value).apply()
         }
 
-        preferences.edit().putString("preset", name).apply()
+        prefs.edit().putString("preset", name).apply()
     }
 
     fun changePreamp(value: Float) {
         preamp = value.coerceIn(-12f, 6f)
         processor.setPreamp(preamp)
-        preferences.edit().putFloat("eq_preamp", preamp).apply()
+        prefs.edit().putFloat("eq_preamp", preamp).apply()
     }
 
     fun changeBass(value: Float) {
         bass = value.coerceIn(0f, 100f)
-
         if (bassEnabled) {
-            audioEffects?.setBassBoost((bass * 10).toInt())
+            audioEffects?.setBassBoost((bass * 10).roundToInt())
         }
-
-        preferences.edit().putFloat("bass", bass).apply()
+        prefs.edit().putFloat("bass", bass).apply()
     }
 
     fun changeVirtualizer(value: Float) {
         virtualizer = value.coerceIn(0f, 100f)
-
         if (virtualizerEnabled) {
-            audioEffects?.setVirtualizer((virtualizer * 10).toInt())
+            audioEffects?.setVirtualizer((virtualizer * 10).roundToInt())
         }
-
-        preferences.edit().putFloat("virtualizer", virtualizer).apply()
+        prefs.edit().putFloat("virtualizer", virtualizer).apply()
     }
 
     fun changeReverb(value: Float) {
         reverb = value.coerceIn(0f, 100f)
-
         if (reverbEnabled) {
-            audioEffects?.setReverbStrength(reverb.toInt())
+            audioEffects?.setReverbStrength(reverb.roundToInt())
         }
-
-        preferences.edit().putFloat("reverb", reverb).apply()
+        prefs.edit().putFloat("reverb", reverb).apply()
     }
 
-    fun applyVolume(value: Int) {
-        volume = value.coerceIn(0, 200)
-        audioEffects?.setVolumeLevel(volume)
-        preferences.edit().putInt("volume", volume).apply()
+    fun changeVolume(value: Float) {
+        volume = value.coerceIn(0f, 200f)
+        audioEffects?.setVolumeLevel(volume.roundToInt())
+        prefs.edit().putInt("volume", volume.roundToInt()).apply()
     }
 
     LaunchedEffect(Unit) {
@@ -285,17 +240,15 @@ fun EqualizerScreen(
             )
         }
 
-        audioEffects?.let { effects ->
-            effects.setVolumeEnabled(volumeEnabled)
-            effects.setBassEnabled(bassEnabled)
-            effects.setVirtualizerEnabled(virtualizerEnabled)
-            effects.setReverbStrength(reverb.toInt())
-            effects.setReverbEnabled(reverbEnabled)
-            effects.setBassBoost(if (bassEnabled) (bass * 10).toInt() else 0)
-            effects.setVirtualizer(
-                if (virtualizerEnabled) (virtualizer * 10).toInt() else 0
-            )
-            effects.setVolumeLevel(volume)
+        audioEffects?.let {
+            it.setBassEnabled(bassEnabled)
+            it.setBassBoost((bass * 10).roundToInt())
+            it.setVirtualizerEnabled(virtualizerEnabled)
+            it.setVirtualizer((virtualizer * 10).roundToInt())
+            it.setReverbEnabled(reverbEnabled)
+            it.setReverbStrength(reverb.roundToInt())
+            it.setVolumeEnabled(volumeEnabled)
+            it.setVolumeLevel(volume.roundToInt())
         }
     }
 
@@ -303,8 +256,8 @@ fun EqualizerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(EQBlack)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -315,110 +268,113 @@ fun EqualizerScreen(
                 Text("← BACK", color = EQGold, fontWeight = FontWeight.Bold)
             }
 
-            Text("♫", color = EQGold, fontSize = 25.sp)
-        }
-
-        Text(
-            "KG SOUND CONSOLE",
-            color = EQGold,
-            fontSize = 23.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 1.5.sp
-        )
-
-        Text(
-            "10-BAND PROFESSIONAL AUDIO CONTROL",
-            color = EQMuted,
-            fontSize = 9.sp,
-            letterSpacing = 1.5.sp
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            ModeCard(
-                title = "EQUALIZER",
-                active = eqEnabled,
-                selected = mode == SoundMode.EQ,
-                modifier = Modifier.weight(1f),
-                onSelect = { mode = SoundMode.EQ },
-                onPower = {
-                    eqEnabled = !eqEnabled
-                    processor.setEnabled(eqEnabled)
-                    savePowerSettings()
-                }
-            )
-
-            ModeCard(
-                title = "VOLUME",
-                active = volumeEnabled,
-                selected = mode == SoundMode.VOLUME,
-                modifier = Modifier.weight(1f),
-                onSelect = { mode = SoundMode.VOLUME },
-                onPower = {
-                    volumeEnabled = !volumeEnabled
-                    audioEffects?.setVolumeEnabled(volumeEnabled)
-                    savePowerSettings()
-                }
-            )
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        if (mode == SoundMode.EQ) {
-            ConsolePanel("SOUND PRESETS") {
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    soundPresets.keys.forEach { name ->
-                        Surface(
-                            onClick = { applyPreset(name) },
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (preset == name) EQCopper else EQMetal,
-                            border = BorderStroke(
-                                1.dp,
-                                if (preset == name) EQGold else EQCopper.copy(alpha = 0.4f)
-                            )
-                        ) {
-                            Text(
-                                name.uppercase(),
-                                color = Color.White,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(
-                                    horizontal = 11.dp,
-                                    vertical = 10.dp
-                                )
-                            )
-                        }
-                    }
-                }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "KG SOUND CONSOLE",
+                    color = EQGold,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 2.sp
+                )
+                Text(
+                    "10-BAND AUDIO CONTROL",
+                    color = EQMuted,
+                    fontSize = 8.sp,
+                    letterSpacing = 2.sp
+                )
             }
 
-            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("EQ", color = EQMuted, fontSize = 10.sp)
+                Switch(
+                    checked = eqEnabled,
+                    onCheckedChange = {
+                        eqEnabled = it
+                        processor.setEnabled(it)
+                        savePower()
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = EQGreen,
+                        checkedTrackColor = EQCopper
+                    )
+                )
+            }
+        }
 
-            ConsolePanel("10-BAND GRAPHIC EQUALIZER") {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            eqPresets.keys.forEach { name ->
+                val selected = preset == name
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(
+                            if (selected) EQCopper else EQPanel,
+                            RoundedCornerShape(5.dp)
+                        )
+                        .clickable { applyPreset(name) }
+                        .padding(vertical = 7.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        name.uppercase(),
+                        color = if (selected) Color.White else EQMuted,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(5f)
+                    .fillMaxHeight()
+                    .background(EQPanel, RoundedCornerShape(9.dp))
+                    .padding(8.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("31 Hz", color = EQMuted, fontSize = 9.sp)
-                    Text("GAIN  -12 dB TO +12 dB", color = EQMuted, fontSize = 9.sp)
-                    Text("16 kHz", color = EQMuted, fontSize = 9.sp)
+                    Text(
+                        "GRAPHIC EQUALIZER",
+                        color = EQGold,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "−12 dB                         +12 dB",
+                        color = EQMuted,
+                        fontSize = 8.sp
+                    )
                 }
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(4.dp))
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     levels.forEachIndexed { index, level ->
                         Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
                                 "%+.0f".format(level),
@@ -427,606 +383,326 @@ fun EqualizerScreen(
                                 fontWeight = FontWeight.Bold
                             )
 
-                            VerticalFader(
+                            VerticalBandFader(
                                 value = level,
                                 enabled = bandEnabled[index],
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .width(28.dp)
+                                    .padding(vertical = 3.dp),
                                 onValueChange = { updateBand(index, it) }
                             )
 
                             Text(
-                                bandLabels[index],
+                                eqLabels[index],
                                 color = EQMuted,
                                 fontSize = 9.sp
                             )
 
-                            Spacer(Modifier.height(5.dp))
-
-                            Surface(
-                                onClick = { toggleBand(index) },
-                                shape = RoundedCornerShape(5.dp),
-                                color = if (bandEnabled[index]) EQCopper else EQMetal
-                            ) {
-                                Text(
-                                    if (bandEnabled[index]) "ON" else "OFF",
-                                    color = Color.White,
-                                    fontSize = 7.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(
-                                        horizontal = 4.dp,
-                                        vertical = 5.dp
-                                    )
-                                )
-                            }
+                            Text(
+                                if (bandEnabled[index]) "ON" else "OFF",
+                                color = if (bandEnabled[index]) EQGreen else EQMuted,
+                                fontSize = 8.sp,
+                                modifier = Modifier.clickable {
+                                    toggleBand(index)
+                                }
+                            )
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-
-            ConsolePanel("PREAMP / OUTPUT HEADROOM") {
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("PREAMP", color = EQMuted, fontSize = 10.sp)
-                    Text(
-                        "%.1f dB".format(preamp),
-                        color = EQGold,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+            Column(
+                modifier = Modifier
+                    .weight(1.1f)
+                    .fillMaxHeight()
+                    .background(EQPanel, RoundedCornerShape(9.dp))
+                    .padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Text("PREAMP", color = EQGold, fontSize = 10.sp)
+                Text("%.1f dB".format(preamp), color = EQGreen, fontSize = 11.sp)
 
                 Slider(
                     value = preamp,
                     onValueChange = { changePreamp(it) },
                     valueRange = -12f..6f,
+                    modifier = Modifier
+                        .weight(1f)
+                        .width(34.dp),
                     colors = SliderDefaults.colors(
                         thumbColor = EQGold,
                         activeTrackColor = EQCopper,
-                        inactiveTrackColor = EQMetal
+                        inactiveTrackColor = EQBlack
                     )
                 )
-
-                Text(
-                    "Lower the preamp when boosting several bands to reduce clipping.",
-                    color = EQMuted,
-                    fontSize = 9.sp
-                )
+                Text("OUTPUT", color = EQMuted, fontSize = 8.sp)
             }
+        }
 
-            Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(112.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            EffectPanel(
+                title = "BASS BOOST",
+                value = bass,
+                enabled = bassEnabled,
+                onEnabled = {
+                    bassEnabled = it
+                    audioEffects?.setBassEnabled(it)
+                    if (it) audioEffects?.setBassBoost((bass * 10).roundToInt())
+                    savePower()
+                },
+                onValue = { changeBass(it) },
+                modifier = Modifier.weight(1f)
+            )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                KnobPanel(
-                    title = "BASS BOOST",
-                    value = bass,
-                    enabled = bassEnabled,
-                    onPower = {
-                        bassEnabled = !bassEnabled
-                        audioEffects?.setBassEnabled(bassEnabled)
-                        if (bassEnabled) {
-                            audioEffects?.setBassBoost((bass * 10).toInt())
-                        }
-                        savePowerSettings()
-                    },
-                    onValueChange = { changeBass(it) },
-                    modifier = Modifier.weight(1f)
-                )
+            EffectPanel(
+                title = "VIRTUALIZER",
+                value = virtualizer,
+                enabled = virtualizerEnabled,
+                onEnabled = {
+                    virtualizerEnabled = it
+                    audioEffects?.setVirtualizerEnabled(it)
+                    if (it) audioEffects?.setVirtualizer((virtualizer * 10).roundToInt())
+                    savePower()
+                },
+                onValue = { changeVirtualizer(it) },
+                modifier = Modifier.weight(1f)
+            )
 
-                KnobPanel(
-                    title = "VIRTUALIZER",
-                    value = virtualizer,
-                    enabled = virtualizerEnabled,
-                    onPower = {
-                        virtualizerEnabled = !virtualizerEnabled
-                        audioEffects?.setVirtualizerEnabled(virtualizerEnabled)
-                        if (virtualizerEnabled) {
-                            audioEffects?.setVirtualizer((virtualizer * 10).toInt())
-                        }
-                        savePowerSettings()
-                    },
-                    onValueChange = { changeVirtualizer(it) },
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            EffectPanel(
+                title = "ROOM REVERB",
+                value = reverb,
+                enabled = reverbEnabled,
+                onEnabled = {
+                    reverbEnabled = it
+                    audioEffects?.setReverbEnabled(it)
+                    if (it) audioEffects?.setReverbStrength(reverb.roundToInt())
+                    savePower()
+                },
+                onValue = { changeReverb(it) },
+                modifier = Modifier.weight(1f)
+            )
 
-            Spacer(Modifier.height(12.dp))
-
-            ConsolePanel("ROOM REVERB") {
+            Column(
+                modifier = Modifier
+                    .weight(1.25f)
+                    .fillMaxHeight()
+                    .background(EQPanel, RoundedCornerShape(9.dp))
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.SpaceEvenly
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            "SPATIAL AMBIENCE",
-                            color = EQGold,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp
-                        )
-                        Text(
-                            "Adds a room-like acoustic tail",
-                            color = EQMuted,
-                            fontSize = 9.sp
-                        )
-                    }
-
-                    PowerButton(
-                        enabled = reverbEnabled,
-                        onClick = {
-                            reverbEnabled = !reverbEnabled
-                            audioEffects?.setReverbEnabled(reverbEnabled)
-                            if (reverbEnabled) {
-                                audioEffects?.setReverbStrength(reverb.toInt())
-                            }
-                            savePowerSettings()
-                        }
-                    )
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("STRENGTH", color = EQMuted, fontSize = 10.sp)
+                    Text("MASTER VOLUME", color = EQGold, fontSize = 9.sp)
                     Text(
-                        "${reverb.toInt()}%",
-                        color = EQGold,
+                        "${volume.roundToInt()}%",
+                        color = EQGreen,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
                 Slider(
-                    value = reverb,
-                    onValueChange = { changeReverb(it) },
-                    enabled = reverbEnabled,
-                    valueRange = 0f..100f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = EQGold,
-                        activeTrackColor = EQCopper,
-                        inactiveTrackColor = EQMetal
-                    )
-                )
-            }
-
-        } else {
-            ConsolePanel("MASTER VOLUME CONTROL") {
-                Text(
-                    if (volume == 0) "MUTED" else "$volume%",
-                    color = EQGold,
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Black
-                )
-
-                Text(
-                    if (volumeEnabled) "● SIGNAL ACTIVE" else "● OUTPUT OFF",
-                    color = if (volumeEnabled) EQGreen else EQMuted,
-                    fontSize = 10.sp
-                )
-
-                Slider(
-                    value = volume.toFloat(),
-                    onValueChange = { value ->
-                        val newValue = value.toInt()
-                        if (newValue <= 100) {
-                            applyVolume(newValue)
-                        } else {
-                            pendingVolume = newValue
-                            showVolumeWarning = true
-                        }
-                    },
+                    value = volume,
+                    onValueChange = { changeVolume(it) },
                     valueRange = 0f..200f,
                     colors = SliderDefaults.colors(
                         thumbColor = EQGold,
                         activeTrackColor = EQCopper,
-                        inactiveTrackColor = EQMetal
+                        inactiveTrackColor = EQBlack
                     )
                 )
 
-                Text(
-                    "Higher output levels can cause distortion and may damage hearing.",
-                    color = EQMuted,
-                    fontSize = 9.sp
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            ConsolePanel("BASS BOOST") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("BASS LEVEL", color = EQMuted, fontSize = 10.sp)
-                    Text("${bass.toInt()}%", color = EQGold)
-                }
-
-                Slider(
-                    value = bass,
-                    onValueChange = { changeBass(it) },
-                    valueRange = 0f..100f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = EQGold,
-                        activeTrackColor = EQCopper
+                    Text("VOLUME EFFECT", color = EQMuted, fontSize = 8.sp)
+                    Switch(
+                        checked = volumeEnabled,
+                        onCheckedChange = {
+                            volumeEnabled = it
+                            audioEffects?.setVolumeEnabled(it)
+                            savePower()
+                        },
+                        modifier = Modifier.height(28.dp),
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = EQGreen,
+                            checkedTrackColor = EQCopper
+                        )
                     )
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        Button(
-            onClick = {
-                applyPreset("Normal")
-                changePreamp(0f)
-                changeBass(0f)
-                changeVirtualizer(0f)
-                changeReverb(0f)
-                applyVolume(100)
-
-                bandEnabled.indices.forEach { index ->
-                    bandEnabled[index] = true
-                    processor.setBandGain(index, 0f)
-                    saveBand(index)
                 }
+            }
 
-                eqEnabled = true
-                volumeEnabled = true
-                bassEnabled = true
-                virtualizerEnabled = true
-                reverbEnabled = false
+            Column(
+                modifier = Modifier
+                    .width(76.dp)
+                    .fillMaxHeight()
+                    .background(EQPanel, RoundedCornerShape(9.dp))
+                    .clickable {
+                        levels.indices.forEach { index ->
+                            levels[index] = 0f
+                            bandEnabled[index] = true
+                            processor.setBandGain(index, 0f)
+                            prefs.edit()
+                                .putFloat("ten_eq_$index", 0f)
+                                .putBoolean("ten_band_enabled_$index", true)
+                                .apply()
+                        }
 
-                processor.setEnabled(true)
-                audioEffects?.setVolumeEnabled(true)
-                audioEffects?.setBassEnabled(true)
-                audioEffects?.setVirtualizerEnabled(true)
-                audioEffects?.setReverbEnabled(false)
-
-                savePowerSettings()
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(9.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = EQCopper
-            )
-        ) {
-            Text(
-                "RESET SOUND CONSOLE",
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(Modifier.height(20.dp))
-    }
-
-    if (showVolumeWarning) {
-        AlertDialog(
-            onDismissRequest = { showVolumeWarning = false },
-            containerColor = EQPanel,
-            title = {
+                        preamp = 0f
+                        processor.setPreamp(0f)
+                        preset = "Normal"
+                        prefs.edit()
+                            .putFloat("eq_preamp", 0f)
+                            .putString("preset", "Normal")
+                            .apply()
+                    }
+                    .padding(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("↺", color = EQGold, fontSize = 25.sp)
                 Text(
-                    "HIGH VOLUME WARNING",
+                    "RESET",
                     color = EQGold,
+                    fontSize = 9.sp,
                     fontWeight = FontWeight.Bold
                 )
-            },
-            text = {
-                Text(
-                    "You selected $pendingVolume% volume. " +
-                        "High output can damage hearing and cause distortion. " +
-                        "Do you want to proceed?",
-                    color = Color.White
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        applyVolume(pendingVolume)
-                        showVolumeWarning = false
-                    }
-                ) {
-                    Text("YES, PROCEED", color = EQGold)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showVolumeWarning = false }
-                ) {
-                    Text("NO, CANCEL", color = EQMuted)
-                }
+                Text("SOUND", color = EQMuted, fontSize = 8.sp)
             }
-        )
+        }
     }
 }
 
 @Composable
-private fun ModeCard(
+private fun EffectPanel(
     title: String,
-    active: Boolean,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onSelect: () -> Unit,
-    onPower: () -> Unit
+    value: Float,
+    enabled: Boolean,
+    onEnabled: (Boolean) -> Unit,
+    onValue: (Float) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.clickable { onSelect() },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = EQPanel),
-        border = BorderStroke(
-            1.dp,
-            if (selected) EQGold else EQCopper.copy(alpha = 0.5f)
-        )
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .background(EQPanel, RoundedCornerShape(9.dp))
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.SpaceEvenly
     ) {
-        Column(
-            modifier = Modifier.padding(9.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 title,
                 color = EQGold,
-                fontSize = 11.sp,
+                fontSize = 9.sp,
                 fontWeight = FontWeight.Bold
             )
-
-            Spacer(Modifier.height(7.dp))
-
-            PowerButton(enabled = active, onClick = onPower)
-
             Text(
-                if (selected) "SELECTED" else "TAP TO SELECT",
-                color = EQMuted,
-                fontSize = 8.sp
+                if (enabled) "ON" else "OFF",
+                color = if (enabled) EQGreen else EQMuted,
+                fontSize = 8.sp,
+                modifier = Modifier.clickable { onEnabled(!enabled) }
             )
         }
-    }
-}
 
-@Composable
-private fun PowerButton(
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        color = if (enabled) EQCopper else EQMetal
-    ) {
         Text(
-            if (enabled) "● ON" else "○ OFF",
-            color = Color.White,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(
-                horizontal = 12.dp,
-                vertical = 7.dp
+            "${value.roundToInt()}%",
+            color = EQGreen,
+            fontSize = 11.sp
+        )
+
+        Slider(
+            value = value,
+            onValueChange = onValue,
+            valueRange = 0f..100f,
+            enabled = enabled,
+            colors = SliderDefaults.colors(
+                thumbColor = EQGold,
+                activeTrackColor = EQCopper,
+                inactiveTrackColor = EQBlack,
+                disabledThumbColor = EQMuted
             )
         )
     }
 }
 
 @Composable
-private fun ConsolePanel(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = EQPanel),
-        border = BorderStroke(1.dp, EQCopper.copy(alpha = 0.65f))
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Text(
-                title,
-                color = EQGold,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-
-            Spacer(Modifier.height(10.dp))
-            content()
-        }
-    }
-}
-
-@Composable
-private fun VerticalFader(
+private fun VerticalBandFader(
     value: Float,
     enabled: Boolean,
+    modifier: Modifier = Modifier,
     onValueChange: (Float) -> Unit
 ) {
     Canvas(
-        modifier = Modifier
-            .width(25.dp)
-            .height(132.dp)
-            .pointerInput(enabled) {
-                fun update(y: Float) {
-                    if (!enabled) return
+        modifier = modifier.pointerInput(enabled) {
+            if (!enabled) return@pointerInput
 
-                    val top = 5f
-                    val bottom = size.height - 5f
-                    val progress = (
-                        1f - (y - top) / (bottom - top)
-                    ).coerceIn(0f, 1f)
-
-                    onValueChange(-12f + progress * 24f)
-                }
-
-                detectTapGestures { update(it.y) }
+            fun update(y: Float) {
+                val usable = size.height.coerceAtLeast(1f)
+                val fraction = (1f - (y / usable)).coerceIn(0f, 1f)
+                onValueChange(-12f + fraction * 24f)
             }
-            .pointerInput(enabled) {
-                detectDragGestures { change, _ ->
-                    change.consume()
-                    if (!enabled) return@detectDragGestures
 
-                    val top = 5f
-                    val bottom = size.height - 5f
-                    val progress = (
-                        1f - (change.position.y - top) / (bottom - top)
-                    ).coerceIn(0f, 1f)
+            detectTapGestures { update(it.y) }
+        }.pointerInput(enabled) {
+            if (!enabled) return@pointerInput
 
-                    onValueChange(-12f + progress * 24f)
-                }
+            detectDragGestures { change, _ ->
+                change.consume()
+                val fraction = (
+                    1f - change.position.y / size.height.coerceAtLeast(1f)
+                ).coerceIn(0f, 1f)
+                onValueChange(-12f + fraction * 24f)
             }
+        }
     ) {
         val centerX = size.width / 2f
         val top = 5f
         val bottom = size.height - 5f
-        val progress = ((value + 12f) / 24f).coerceIn(0f, 1f)
-        val thumbY = bottom - progress * (bottom - top)
+        val centerY = (top + bottom) / 2f
+        val fraction = ((value + 12f) / 24f).coerceIn(0f, 1f)
+        val thumbY = bottom - fraction * (bottom - top)
 
         drawLine(
-            EQMetal,
-            Offset(centerX, top),
-            Offset(centerX, bottom),
-            strokeWidth = 7.dp.toPx(),
-            cap = StrokeCap.Round
+            color = EQMuted.copy(alpha = 0.6f),
+            start = Offset(centerX, top),
+            end = Offset(centerX, bottom),
+            strokeWidth = 5f
         )
 
         drawLine(
-            if (enabled) EQCopper else EQMuted,
-            Offset(centerX, thumbY),
-            Offset(centerX, bottom),
-            strokeWidth = 7.dp.toPx(),
-            cap = StrokeCap.Round
+            color = EQCopper,
+            start = Offset(centerX, centerY),
+            end = Offset(centerX, thumbY),
+            strokeWidth = 5f
         )
 
-        drawRoundRect(
+        drawLine(
             color = if (enabled) EQGold else EQMuted,
-            topLeft = Offset(centerX - 8.dp.toPx(), thumbY - 5.dp.toPx()),
-            size = androidx.compose.ui.geometry.Size(
-                16.dp.toPx(),
-                10.dp.toPx()
-            ),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx())
+            start = Offset(centerX - 9f, thumbY),
+            end = Offset(centerX + 9f, thumbY),
+            strokeWidth = 5f
         )
-    }
-}
 
-@Composable
-private fun KnobPanel(
-    title: String,
-    value: Float,
-    enabled: Boolean,
-    onPower: () -> Unit,
-    onValueChange: (Float) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    ConsolePanel(title) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            RotaryKnob(
-                value = value,
-                enabled = enabled,
-                onValueChange = onValueChange,
-                modifier = Modifier.size(105.dp)
-            )
-
-            Text(
-                "${value.toInt()}%",
-                color = EQGold,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(Modifier.height(7.dp))
-            PowerButton(enabled = enabled, onClick = onPower)
-        }
-    }
-}
-
-@Composable
-private fun RotaryKnob(
-    value: Float,
-    enabled: Boolean,
-    onValueChange: (Float) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val latestValue = rememberUpdatedState(value)
-    val latestChange = rememberUpdatedState(onValueChange)
-    val progress = (value / 100f).coerceIn(0f, 1f)
-
-    Box(
-        modifier = modifier.pointerInput(enabled) {
-            detectDragGestures { change, dragAmount ->
-                change.consume()
-
-                if (enabled) {
-                    latestChange.value(
-                        (latestValue.value - dragAmount.y * 0.8f)
-                            .coerceIn(0f, 100f)
-                    )
-                }
-            }
-        },
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val center = Offset(size.width / 2f, size.height / 2f)
-            val radius = size.minDimension * 0.37f
-            val stroke = 6.dp.toPx()
-
-            drawCircle(EQMetal, radius + 8.dp.toPx(), center)
-            drawCircle(EQCopper, radius, center)
-            drawCircle(EQPanel, radius * 0.78f, center)
-
-            drawArc(
-                color = EQMuted.copy(alpha = 0.4f),
-                startAngle = 135f,
-                sweepAngle = 270f,
-                useCenter = false,
-                topLeft = Offset(
-                    center.x - radius - 4.dp.toPx(),
-                    center.y - radius - 4.dp.toPx()
-                ),
-                size = androidx.compose.ui.geometry.Size(
-                    (radius + 4.dp.toPx()) * 2,
-                    (radius + 4.dp.toPx()) * 2
-                ),
-                style = Stroke(stroke, cap = StrokeCap.Round)
-            )
-
-            drawArc(
-                color = if (enabled) EQGreen else EQMuted,
-                startAngle = 135f,
-                sweepAngle = 270f * progress,
-                useCenter = false,
-                topLeft = Offset(
-                    center.x - radius - 4.dp.toPx(),
-                    center.y - radius - 4.dp.toPx()
-                ),
-                size = androidx.compose.ui.geometry.Size(
-                    (radius + 4.dp.toPx()) * 2,
-                    (radius + 4.dp.toPx()) * 2
-                ),
-                style = Stroke(stroke, cap = StrokeCap.Round)
-            )
-
-            val angle = Math.toRadians(135.0 + 270.0 * progress)
-
-            drawLine(
-                EQGold,
-                Offset(
-                    center.x + cos(angle).toFloat() * radius * 0.12f,
-                    center.y + sin(angle).toFloat() * radius * 0.12f
-                ),
-                Offset(
-                    center.x + cos(angle).toFloat() * radius * 0.65f,
-                    center.y + sin(angle).toFloat() * radius * 0.65f
-                ),
-                strokeWidth = 4.dp.toPx(),
-                cap = StrokeCap.Round
-            )
-
-            drawCircle(EQGold, 4.dp.toPx(), center)
-        }
+        drawCircle(
+            color = if (enabled) EQGold else EQMuted,
+            radius = 6f,
+            center = Offset(centerX, thumbY)
+        )
     }
 }
